@@ -38,7 +38,15 @@ UCLAW desktop (CORTEX: Agent + LLM + memory_graph + MCP + skills)
 
 Audio (mic + speaker) and vision (camera) run on the iPhone natively; the Looi robot does **not** carry audio/video. Lip-sync illusion comes from coordinating TTS playback with BLE light-pulse / motion-micro commands.
 
-Full design in the [M0 spec](https://github.com/novolei/uclaw-new/blob/main/docs/superpowers/specs/2026-05-17-ulooi-design.md).
+Full design in the [M0 umbrella spec](https://github.com/novolei/uclaw-new/blob/main/docs/superpowers/specs/2026-05-17-ulooi-design.md).
+
+## Documentation
+
+- [`docs/prd.md`](docs/prd.md) — Product Requirements Document (personas, user stories, UX flows, success metrics)
+- [`docs/architecture.md`](docs/architecture.md) — Overall architecture (tech stack, module layering, data model, protocol codegen, file structure)
+- [M0 umbrella spec](https://github.com/novolei/uclaw-new/blob/main/docs/superpowers/specs/2026-05-17-ulooi-design.md) (cross-project program design, lives in UCLAW repo)
+
+iOS implementation: **Pure SwiftUI / Swift**, no Rust on iOS. Protocol consistency with UCLAW achieved via [CDDL](https://datatracker.ietf.org/doc/html/rfc8610) schema codegen (a single source spec generates both Swift `Codable` types and Rust serde structs). See [architecture §2](docs/architecture.md#2-技术栈选择) for rationale.
 
 ## Requirements
 
