@@ -124,16 +124,10 @@ private struct DiscoveryRow: View {
                     .lineLimit(1)
             }
             HStack {
-                Button("Connect") {
-                    central.connect(discovery.id)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-
-                // Looi-specific 1-tap shortcut: connect + auto-discover services +
-                // run INIT handshake. Without this, manual tapping is too slow —
-                // Looi drops the connection in ~2s waiting for the handshake.
-                // Only shown for peripherals whose advertised name looks like Looi.
+                // For LOOI devices, ONLY show the auto-init button — the plain
+                // Connect button is a trap (Looi drops the connection in ~2s
+                // without the INIT handshake + heartbeat). For non-Looi BLE
+                // peripherals, plain Connect is correct (exploratory).
                 if discovery.name.uppercased().contains("LOOI") {
                     Button("⚡ Connect + Init Looi") {
                         Task {
@@ -142,8 +136,13 @@ private struct DiscoveryRow: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
+                } else {
+                    Button("Connect") {
+                        central.connect(discovery.id)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                 }
-
                 Spacer()
             }
             .padding(.top, 4)
