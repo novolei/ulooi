@@ -19,5 +19,5 @@ import Foundation
 /// Phase that auto-injects `git rev-parse --short HEAD` at build time. Not
 /// done yet to avoid pbxproj edits while the project is fresh.
 enum BuildInfo {
-    static let label = "Probe v2: motion-bytes logged + heartbeat log accuracy · 2026-05-17 · newer than 4f53930"
+    static let label = "Probe v2: PresetRow tap fix + DevLog preset clicks · 2026-05-17 · newer than 355b5a9"
 }

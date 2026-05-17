@@ -156,10 +156,19 @@ struct CommandView: View {
 
     private func sendPreset(_ preset: LooiCommand.Preset) {
         guard let char = characteristic(for: preset.characteristic) else {
-            log.warn("preset '\(preset.label)' — target char \(preset.characteristic.uuidString) not discovered")
+            DevLog.warn(
+                "preset '\(preset.label)' — target char \(preset.characteristic.uuidString) not discovered",
+                channel: DevLog.ui
+            )
             return
         }
-        log.info("preset: \(preset.label)  src=\(preset.source)  status=\(preset.status.rawValue)")
+        // Use DevLog (not just ProbeLog) so Xcode console shows preset clicks
+        // immediately — was the missing diagnostic when user reported
+        // "无法点击应用 只是显示状态" — preset taps were silent in console.
+        DevLog.event(
+            "preset tapped: \(preset.label) → \(preset.characteristic.uuidString.prefix(8)) bytes=\(preset.bytes.hexEncoded) (\(preset.source))",
+            channel: DevLog.ui
+        )
         central.write(preset.bytes, to: char)
     }
 
@@ -206,7 +215,18 @@ private struct PresetRow: View {
                         .padding(.top, 2)
                 }
             }
+            // Make the ENTIRE VStack area tappable — without this, only the
+            // text glyphs themselves are hit targets and the surrounding row
+            // padding swallows taps.
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
+        // .borderless removes the list-row chrome that Form rows otherwise
+        // apply — chrome was visually showing the preset info but the
+        // action wasn't reliably firing on tap in iOS 18 Form context.
+        // Combined with `.contentShape(Rectangle())` above, the entire row
+        // becomes a clean Button hit target.
+        .buttonStyle(.borderless)
         .disabled(!isAvailable)
     }
 
