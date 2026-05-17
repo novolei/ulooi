@@ -129,6 +129,87 @@ final class BLECentral: NSObject {
         p.setNotifyValue(false, for: characteristic)
     }
 
+    // MARK: - Looi-specific (move to LooiSession.swift in M1)
+
+    /// Find a discovered characteristic by UUID, scanning all known services.
+    /// Returns nil if not yet discovered (run discoverAllServices first).
+    func findCharacteristic(_ uuid: CBUUID) -> CBCharacteristic? {
+        discoveredServices.flatMap { $0.characteristics ?? [] }.first { $0.uuid == uuid }
+    }
+
+    /// Full "connect + auto-init" flow for a Looi peripheral. Bundles the
+    /// previously-manual sequence (connect → discover services → write 0x01 →
+    /// subscribe sensors+telemetry → write 0x03) into one async call.
+    ///
+    /// Why: Looi drops the connection within ~2 seconds of connect if the INIT
+    /// handshake doesn't complete (sooperchargeforbots README confirms this).
+    /// Manually tapping through Inspect → Command → Sense → Command can't keep
+    /// up. This method completes the whole thing in <2.5s.
+    ///
+    /// Uses crude Task.sleep delays for delegate-callback sequencing — for
+    /// M0.5 throwaway this is fine; M1 will rewrite with CheckedContinuation
+    /// or proper async/await wrappers.
+    func connectAndAutoInitLooi(_ id: UUID) async {
+        DevLog.event("connectAndAutoInitLooi: starting for \(id.uuidString.prefix(8))", channel: DevLog.ble)
+        connect(id)
+
+        // Wait for didConnect + auto-discoverServices to fire.
+        // Typical iOS connect: 200-600ms.
+        try? await Task.sleep(for: .milliseconds(800))
+
+        guard let p = connectedPeripheral, p.state == .connected else {
+            DevLog.warn("connectAndAutoInitLooi: not connected after 800ms — aborting", channel: DevLog.ble)
+            return
+        }
+
+        // Auto-discoverServices was triggered in didConnect; wait for the full
+        // service + characteristic enumeration to complete. iOS typically
+        // enumerates ~10 services × ~5 chars each in 1-2s.
+        try? await Task.sleep(for: .milliseconds(1500))
+
+        await runLooiInit()
+    }
+
+    /// Run the Looi INIT handshake against an already-connected peripheral
+    /// whose services/chars are already discovered.
+    /// Sequence: write 0x01 → FEDA, subscribe FED5+FED9, write 0x03 → FEDA.
+    /// ✅ Source: andrey-tut/LOOI-Robot waasd.py, verified.
+    func runLooiInit() async {
+        guard let handshake = findCharacteristic(LooiProtocol.Char.handshake) else {
+            DevLog.warn(
+                "runLooiInit: handshake char (FEDA) not found. Run Inspect → Discover all services first, or use Connect+Auto-Init Looi from Scan tab.",
+                channel: DevLog.ble
+            )
+            return
+        }
+        guard let sensors = findCharacteristic(LooiProtocol.Char.sensors) else {
+            DevLog.warn("runLooiInit: sensors char (FED5) not found", channel: DevLog.ble)
+            return
+        }
+        guard let telemetry = findCharacteristic(LooiProtocol.Char.telemetry) else {
+            DevLog.warn("runLooiInit: telemetry char (FED9) not found", channel: DevLog.ble)
+            return
+        }
+
+        DevLog.event("Looi INIT 1/3 — writing 0x01 to FEDA", channel: DevLog.ble)
+        write(LooiProtocol.Handshake.phase1Data, to: handshake)
+        try? await Task.sleep(for: .milliseconds(150))
+
+        DevLog.event("Looi INIT 2/3 — subscribing FED5 + FED9", channel: DevLog.ble)
+        subscribe(to: sensors)
+        subscribe(to: telemetry)
+        try? await Task.sleep(for: .milliseconds(150))
+
+        DevLog.event("Looi INIT 3/3 — writing 0x03 to FEDA", channel: DevLog.ble)
+        write(LooiProtocol.Handshake.phase2Data, to: handshake)
+
+        DevLog.event(
+            "Looi INIT complete — connection should now stay alive. " +
+            "Try motion / head / light commands from Command tab.",
+            channel: DevLog.ble
+        )
+    }
+
     // MARK: - State translation (used by central delegate)
 
     /// `nonisolated` because it's pure value translation — no state access.

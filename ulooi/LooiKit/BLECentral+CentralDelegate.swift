@@ -65,7 +65,14 @@ extension BLECentral: CBCentralManagerDelegate {
     nonisolated func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         let pid = peripheral.identifier
         Task { @MainActor in
-            DevLog.event("connected: \(pid)")
+            DevLog.event("connected: \(pid)", channel: DevLog.ble)
+            // Auto-discover services on connect. Without this, Looi would drop
+            // the connection within ~2s waiting for the INIT handshake (which
+            // requires service/char discovery first). Discovering all services
+            // is also harmless for non-Looi peripherals.
+            DevLog.event("auto-discoverServices: starting", channel: DevLog.ble)
+            self.discoveredServices.removeAll()
+            peripheral.discoverServices(nil)
         }
     }
 

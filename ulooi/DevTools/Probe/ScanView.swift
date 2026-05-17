@@ -127,8 +127,23 @@ private struct DiscoveryRow: View {
                 Button("Connect") {
                     central.connect(discovery.id)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.bordered)
                 .controlSize(.small)
+
+                // Looi-specific 1-tap shortcut: connect + auto-discover services +
+                // run INIT handshake. Without this, manual tapping is too slow —
+                // Looi drops the connection in ~2s waiting for the handshake.
+                // Only shown for peripherals whose advertised name looks like Looi.
+                if discovery.name.uppercased().contains("LOOI") {
+                    Button("⚡ Connect + Init Looi") {
+                        Task {
+                            await central.connectAndAutoInitLooi(discovery.id)
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+
                 Spacer()
             }
             .padding(.top, 4)
