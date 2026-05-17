@@ -6,58 +6,71 @@ struct CommandView: View {
     let log: ProbeLog
 
     @State private var hexInput: String = ""
-    @State private var selectedCharacteristicID: CBUUID?
+    @State private var manualTargetID: CBUUID?
     @State private var useWriteWithoutResponse: Bool = false
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("Target characteristic") {
-                    writableCharsPicker
-                    if writableCharacteristics.isEmpty {
-                        Text("Connect + discover services first.")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Section("Bytes to send") {
-                    TextField("Hex (e.g. 7E A1 03 00 FF)", text: $hexInput, axis: .vertical)
-                        .lineLimit(2...4)
-                        .font(.body.monospaced())
-                        .textInputAutocapitalization(.characters)
-                        .autocorrectionDisabled()
-                    Toggle("Write without response", isOn: $useWriteWithoutResponse)
-                    Button("Send") {
-                        sendHex()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(selectedCharacteristic == nil || hexInput.isEmpty)
-                }
-
-                Section("Reference presets (UNVERIFIED — see LooiCommand.swift)") {
-                    ForEach(Array(LooiCommand.allPresets.enumerated()), id: \.offset) { _, preset in
-                        Button {
-                            sendPreset(preset)
-                        } label: {
-                            VStack(alignment: .leading) {
-                                Text(preset.label)
-                                Text("\(preset.source) · \(preset.bytes.hexEncoded)")
-                                    .font(.caption2.monospaced())
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .disabled(selectedCharacteristic == nil)
-                    }
-                }
+                presetSection
+                manualSection
             }
             .navigationTitle("Send Command")
         }
         .onAppear {
-            if selectedCharacteristicID == nil, let first = writableCharacteristics.first {
-                selectedCharacteristicID = first.uuid
+            if manualTargetID == nil, let first = writableCharacteristics.first {
+                manualTargetID = first.uuid
             }
         }
     }
+
+    // MARK: - Presets
+
+    private var presetSection: some View {
+        Section {
+            ForEach(LooiCommand.allPresets) { preset in
+                PresetRow(preset: preset,
+                          isAvailable: characteristic(for: preset.characteristic) != nil) {
+                    sendPreset(preset)
+                }
+            }
+        } header: {
+            Text("Looi presets — hit INIT 1/2 then INIT 2/2 first")
+        } footer: {
+            Text("✅ verified  ⚠️ unverified  ❓ experimental\nA preset is greyed out if its target characteristic hasn't been discovered yet (Inspect tab → Discover all services).")
+                .font(.caption2)
+        }
+    }
+
+    // MARK: - Manual
+
+    private var manualSection: some View {
+        Section("Manual write") {
+            if writableCharacteristics.isEmpty {
+                Text("Connect + discover services first.")
+                    .foregroundStyle(.secondary)
+            } else {
+                Picker("Characteristic", selection: $manualTargetID) {
+                    ForEach(writableCharacteristics, id: \.uuid) { c in
+                        Text(displayName(for: c.uuid)).tag(Optional(c.uuid))
+                    }
+                }
+                TextField("Hex (e.g. 7E A1 03 00 FF)", text: $hexInput, axis: .vertical)
+                    .lineLimit(2...4)
+                    .font(.body.monospaced())
+                    .textInputAutocapitalization(.characters)
+                    .autocorrectionDisabled()
+                Toggle("Write without response", isOn: $useWriteWithoutResponse)
+                Button("Send") {
+                    sendHex()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(manualTarget == nil || hexInput.isEmpty)
+            }
+        }
+    }
+
+    // MARK: - Logic
 
     private var writableCharacteristics: [CBCharacteristic] {
         central.discoveredServices.flatMap { $0.characteristics ?? [] }.filter {
@@ -66,26 +79,19 @@ struct CommandView: View {
         }
     }
 
-    private var selectedCharacteristic: CBCharacteristic? {
-        guard let id = selectedCharacteristicID else { return nil }
+    private var manualTarget: CBCharacteristic? {
+        guard let id = manualTargetID else { return nil }
         return writableCharacteristics.first { $0.uuid == id }
     }
 
-    @ViewBuilder
-    private var writableCharsPicker: some View {
-        if writableCharacteristics.isEmpty {
-            EmptyView()
-        } else {
-            Picker("Characteristic", selection: $selectedCharacteristicID) {
-                ForEach(writableCharacteristics, id: \.uuid) { c in
-                    Text(c.uuid.uuidString).tag(Optional(c.uuid))
-                }
-            }
-        }
+    private func characteristic(for uuid: CBUUID) -> CBCharacteristic? {
+        central.discoveredServices
+            .flatMap { $0.characteristics ?? [] }
+            .first { $0.uuid == uuid }
     }
 
     private func sendHex() {
-        guard let char = selectedCharacteristic else { return }
+        guard let char = manualTarget else { return }
         guard let data = Data(hexString: hexInput) else {
             log.error("invalid hex: \(hexInput)")
             return
@@ -94,16 +100,78 @@ struct CommandView: View {
         central.write(data, to: char, type: type)
     }
 
-    private func sendPreset(_ preset: (label: String, source: String, bytes: Data)) {
-        guard let char = selectedCharacteristic else { return }
-        log.info("preset: \(preset.label)  src=\(preset.source)")
+    private func sendPreset(_ preset: LooiCommand.Preset) {
+        guard let char = characteristic(for: preset.characteristic) else {
+            log.warn("preset '\(preset.label)' — target char \(preset.characteristic.uuidString) not discovered")
+            return
+        }
+        log.info("preset: \(preset.label)  src=\(preset.source)  status=\(preset.status.rawValue)")
         central.write(preset.bytes, to: char)
+    }
+
+    private func displayName(for uuid: CBUUID) -> String {
+        // Map known Looi UUIDs to friendlier labels.
+        switch uuid {
+        case LooiProtocol.Char.movement:    return "FED0 (movement)"
+        case LooiProtocol.Char.head:        return "FED1 (head)"
+        case LooiProtocol.Char.light:       return "FED2 (light)"
+        case LooiProtocol.Char.handshake:   return "FEDA (handshake)"
+        case LooiProtocol.Char.richCommand: return "FE00 (rich/17-byte)"
+        case LooiProtocol.Char.motorBoost:  return "FF02 (motor boost)"
+        default:                            return uuid.uuidString
+        }
     }
 }
 
+// MARK: - Row
+
+private struct PresetRow: View {
+    let preset: LooiCommand.Preset
+    let isAvailable: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(preset.status.rawValue)
+                    Text(preset.label)
+                        .font(.body)
+                        .foregroundStyle(isAvailable ? Color.primary : Color.secondary)
+                }
+                Text("→ \(shortName(preset.characteristic))   bytes: \(preset.bytes.hexEncoded)")
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+                Text("src: \(preset.source)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                if let note = preset.note {
+                    Text(note)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 2)
+                }
+            }
+        }
+        .disabled(!isAvailable)
+    }
+
+    private func shortName(_ uuid: CBUUID) -> String {
+        let s = uuid.uuidString
+        // For 16-bit "0000XXXX-..." pull the X part for a compact label
+        if s.count >= 8 && s.hasPrefix("0000") {
+            let idx = s.index(s.startIndex, offsetBy: 4)
+            let end = s.index(idx, offsetBy: 4)
+            return s[idx..<end].uppercased() + " (" + uuid.uuidString.prefix(8) + ")"
+        }
+        return s
+    }
+}
+
+// MARK: - Hex helper
+
 extension Data {
     init?(hexString: String) {
-        // accept "ab cd ef" or "abcdef" or "ab-cd:ef"
         let cleaned = hexString
             .replacingOccurrences(of: " ", with: "")
             .replacingOccurrences(of: "-", with: "")

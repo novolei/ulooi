@@ -7,139 +7,186 @@
 **iOS 测试设备：** _(iPhone model + iOS version)_
 
 > 此文档伴随 M0.5 probe 同步演化。完成时整合归档，成为 M1 LooiKit spec 的 §2 输入。
-> 所有"验证"指：probe app 实测重复成功 ≥ 3 次。
+> "验证"指：probe app 实测重复成功 ≥ 3 次。
+>
+> 协议假设来自两个 ref repo 的综合（详见 `ulooi/ulooi/LooiKit/LooiProtocol.swift`）；下面的表预填了
+> 综合后的预期值，你只需把"实测"列填上 ✅ / ❌ / ⚠️。
 
 ---
 
-## 1. GATT 拓扑
+## 0. 操作流程（每次上电）
 
-通过 ScanView → 连接 → InspectView → "Discover all services" → "Copy topology as JSON" 导出后，粘贴在下面：
+1. 开 Xcode → `xed ulooi.xcodeproj` → Cmd+R → iPhone
+2. App 启动 → 默认进 DevTools → Scan tab
+3. **Start Scan** → 等"LOOI"开头的设备出现（按 RSSI 排序）
+4. **Connect** → Inspect tab → **Discover all services**
+5. **Copy topology as JSON** → 粘到下面 §1
+6. Command tab → 按顺序点：
+   1. **INIT 1/2** —— 写 0x01 到 FEDA
+   2. **回 Sense tab** —— 订阅 FED5 和 FED9（toggle on）
+   3. 回 Command tab → **INIT 2/2** —— 写 0x03 到 FEDA
+7. （此时机器人应已 ready）依次试 STOP / Forward / Backward / Head center / Light on …，每条对照下面表格填 §2
+
+---
+
+## 1. GATT 拓扑（实测）
+
+通过 Inspect → Copy topology as JSON 拿到的实测结构：
 
 ```
-(从 InspectView 复制 JSON 到这里)
+(粘贴 InspectView 的 Copy 输出)
 ```
 
-### 服务 UUID 归类
+### 1a. UUID 表对照（综合 ref → 实测）
 
-| 服务 UUID | 推断用途 | 来源 |
+| 短 UUID | ref 标记的功能 | 实际发现？ | properties (实测) | 备注 |
+|---|---|---|---|---|
+| FED0 | Movement (write)              | ☐ | _read/write/notify_ | |
+| FED1 | Head (write)                  | ☐ | | |
+| FED2 | Light/torch (write) ⚠️         | ☐ | | sooperchargeforbots only |
+| FED5 | Sensors (notify)              | ☐ | | |
+| FED8 | Battery (read)                | ☐ | | |
+| FED9 | Telemetry (notify)            | ☐ | | cliff/TOF/battery stream |
+| FEDA | Handshake/settings (write)    | ☐ | | required for init |
+| FE00 | Rich command (write 17-byte) ❓| ☐ | | sooperchargeforbots, exploratory |
+| FF02 | Motor boost (write)           | ☐ | | sooperchargeforbots, exploratory |
+| 2A29 | Manufacturer name (read)      | ☐ | | GATT standard; macOS warm-up |
+
+### 1b. 未在 ref 中出现但实测发现的 services / characteristics
+
+| UUID | properties | 推测用途 |
 |---|---|---|
-| _(填)_ | _(motion / sensor / config / DIS / GAP / GATT)_ | _(实测推断 / Nordic UART 模式 / ref repo)_ |
+| _(填)_ | | |
 
 ---
 
-## 2. 验证有效的命令 ✅
+## 2. 命令验证（综合 ref → 实测）
 
-| 命令 | 目标 characteristic | 字节序列 (hex) | 来源 | 实测行为 |
-|---|---|---|---|---|
-| _(e.g. wave hand)_ | _(uuid)_ | `7e a1 03 00 ff` | andrey-tut | 机器人右臂挥动 1 次 |
-| | | | | |
+### 2a. Handshake（必须成功否则后面全无响应）
 
----
-
-## 3. 参考 repo 描述但实测失效的命令 ❌
-
-| 来源 ref 中的命令 | 文档描述 | 我试的字节 | 实测结果 | 推测原因 |
-|---|---|---|---|---|
-| _(e.g. light pattern from sooper)_ | "rainbow cycle" | `5a 02 ff` | 无响应 | 固件已更新 / characteristic UUID 变了 |
-| | | | | |
-
----
-
-## 4. 行为有偏差的命令 ⚠️
-
-| 命令 | 文档预期 | 实测行为 | 是否可用 |
+| 步骤 | UUID | bytes | 实测 |
 |---|---|---|---|
-| | | | |
+| read | 2A29 | — | ☐ ✅ / ☐ ❌ |
+| write | FEDA | `01` | ☐ |
+| notify | FED5 | (subscribe) | ☐ |
+| notify | FED9 | (subscribe) | ☐ |
+| write | FEDA | `03` | ☐ |
+
+握手后机器人是否有任何"我准备好了"的物理/灯光信号？_(描述)_
+
+### 2b. Movement (FED0)
+
+| 命令 | bytes | 预期行为 | 实测 | 备注 |
+|---|---|---|---|---|
+| stop | `00 00` | 停 | | |
+| forward max | `7F 00` | 全速前进 | | 心跳 30ms |
+| backward max | `81 00` | 全速后退 | | |
+| spin left | `00 7F` | 原地左转 | | |
+| spin right | `00 81` | 原地右转 | | |
+| mixed | `40 40` | 半速 + 半左 | | |
+
+**心跳验证：** 发一次 `7F 00` 然后停止 —— 机器人多久停下？预期 ~30ms 后失活。
+
+| 实测停止时间 | _(ms)_ |
+|---|---|
+
+### 2c. Head (FED1)
+
+| 命令 | bytes | 预期 | 实测 | 备注 |
+|---|---|---|---|---|
+| center | `5A` | 90° | | |
+| full left | `00` | min | | |
+| full right | `FF` | max | | |
+| +10° | `64` | 微右 | | |
+| -10° | `50` | 微左 | | |
+
+### 2d. Light (FED2) ⚠️
+
+| 命令 | bytes | 预期 | 实测 | 备注 |
+|---|---|---|---|---|
+| off | `00` | 灯灭 | | |
+| on | `03` | 灯亮 | | |
+| ? | `01` | _(未知)_ | | 试一下 |
+| ? | `02` | _(未知)_ | | 试一下 |
+| ? | `04`..`FF` | _(扫描)_ | | 是否有亮度梯度？RGB？|
+
+### 2e. Rich 17-byte (FE00) ❓
+
+| 命令 | bytes | 实测 |
+|---|---|---|
+| sooper README example | `00 07 00 FF 05 00 00 00 00 64 02 0A 96 02 14 00 02` | _(描述发生了什么)_ |
+
+不期待全懂，记录任何观察到的反应即可。
 
 ---
 
-## 5. 传感事件映射
+## 3. 传感事件解码（FED5 + FED9 notify）
 
-订阅 notify characteristic 后，物理触发 → 收到 byte 流，反推语义：
+订阅后做物理动作，记录 byte 流。
 
-### 触摸（touch）
+### 3a. FED5 (sensors — 推测 touch)
 
-| 物理动作 | characteristic | 收到字节序列 (hex) | 频率 / 持续 |
+| 物理动作 | bytes (hex) | 频率 | 持续 |
 |---|---|---|---|
-| 摸头顶 | _(uuid)_ | _(hex)_ | _(单次 / 持续 / N Hz)_ |
+| 摸头顶 | | | |
 | 摸下巴 | | | |
 | 摸背部 | | | |
+| 不动（baseline） | | | |
 
-### 动作（motion / IMU）
+### 3b. FED9 (telemetry — cliff / TOF / battery)
 
-| 物理动作 | characteristic | 字节模式 | 推断坐标 |
-|---|---|---|---|
-| 抬起 / 放下 | | | |
-| 左右摇晃 | | | |
-| 旋转 | | | |
-
-### 电量 / 状态
-
-| 信号 | characteristic | 字节解读 |
+| 触发 | bytes (hex) | 备注 |
 |---|---|---|
-| 电量百分比 | | |
-| 充电状态 | | |
-| 低电量警告 | | |
+| 端起放下（cliff?） | | |
+| 前方放手（TOF?） | | |
+| baseline 5s | | |
+| 低电量（如能复现） | | |
+
+### 3c. FED8 (battery read)
+
+| 时刻 | 读到的 bytes | 推断电量 % |
+|---|---|---|
+| 满电 | | |
+| 半电 | | |
+| 低电 | | |
 
 ---
 
-## 6. M1 LooiKit 设计含义
+## 4. M1 LooiKit 设计含义
 
 prototype 反过来要怎么影响 M1 spec？逐条记录：
 
-- _(e.g. "MotionController.wave 直接映射到 char X 的字节 Y；不需要 'wave' 抽象层")_
-- _(e.g. "SensorStream 的 touch 事件需要 debounce —— 同一次触摸会触发 3-5 个 notify")_
-- _(e.g. "电量信号的 update 频率是 5s 一次；UI 显示不要假设高频")_
-- _(e.g. "BLE 命令往返延迟实测中位数 X ms / p95 Y ms —— 影响 lipsync 节拍策略")_
+- _(e.g. "MotionController.start() 需自动起一个 30ms heartbeat task；显式 stop 才退出")_
+- _(e.g. "FED2 实测只有 on/off — 不要在 LightController 暴露 setBrightness(_:Float)，改成 setOn(_:Bool)")_
+- _(e.g. "SensorStream.touches 需要 debounce — 摸一下会触发 N 个 byte，相邻 X ms 内视为同一次")_
+- _(e.g. "Init handshake 必须在 connect 完成 + 服务发现完成后自动跑；LooiSession.bringUp() 封装")_
+- _(e.g. "BLE 命令 RTT 中位数 X ms / p95 Y ms — lipsync coordinator 节拍计算用这个")_
 
 ---
 
-## 7. 已知未解（M1 / M2 处理）
+## 5. 已知未解（M1 / M2 处理）
 
-把没搞定的列在这里，避免遗忘：
-
-- _(e.g. "Light 命令所有 candidate 都无响应；可能要逆向 OEM app 抓 BLE 流量")_
-- _(e.g. "找到 6 个 service，3 个用途未明 —— 推后到 M1 prototype 部分继续探测")_
-- _(e.g. "BLE 连接偶尔在 iOS 锁屏 30s 后掉 —— background mode 配置 M3 处理")_
+- _(e.g. "FE00 17-byte 包的 opcode 表未知 —— 要 sniff 官方 app 流量才能完整反解。M3 视情况推进。")_
+- _(e.g. "BLE 连接偶尔在 iOS 锁屏 30s 后掉 —— background mode 配置 M3 处理。")_
+- _(e.g. "Light 命令所有候选值都无响应 —— 是否硬件不带灯？或要其它握手？")_
 
 ---
 
-## 8. 工具链 & 操作记录
-
-为后人 / 未来固件升级时复跑准备：
-
-### 重跑步骤
-
-```
-1. 开 Xcode → ulooi.xcodeproj → 选 iPhone target
-2. Cmd+R → 装到真机（需在 Settings → General → VPN & Device Management 信任 dev profile）
-3. App 启动 → 默认进 DevTools (M0.5 期间)
-4. Scan tab → Start Scan → 等 Looi 出现（按 RSSI 排序，最近的在顶）
-5. Connect → 跳到 Inspect tab → Discover all services
-6. ...
-```
-
-### 已知坑
-
-- _(e.g. "iOS 蓝牙权限第一次拒绝后，要去 Settings.app 手动开启")_
-
----
-
-## 9. 时间日志
+## 6. 时间日志
 
 | 日期 | 进度 | 卡点 |
 |---|---|---|
-| 2026-05-17 | scaffold 完成（DevTools 五屏 + BLECentral 雏形）；待上机 | — |
+| 2026-05-17 | scaffold 完成（DevTools 五屏 + LooiProtocol/LooiCommand 含综合后的 ref 字节序列） | 待上机 |
 | _(下一日填)_ | | |
 
 ---
 
-## 10. 整合 → M1 spec 时的迁移清单
+## 7. 整合 → M1 spec 时的迁移清单
 
-完成 M0.5 后这里列出要带去 M1 spec 的具体条目，避免遗漏：
+完成 M0.5 后这里列出要带去 M1 spec 的具体条目：
 
-- [ ] §1 GATT 拓扑 → M1 spec "§2 LooiKit 抽象层 / 命令字典"
-- [ ] §2 验证有效命令 → M1 spec "命令字典" 表
-- [ ] §5 传感事件映射 → M1 spec "SensorStream 设计"
-- [ ] §6 M1 设计含义 → M1 spec 各章节的"prototype-driven decisions"
-- [ ] §7 已知未解 → M1 spec "风险与开放问题"
+- [ ] §1 GATT 拓扑 → M1 spec §2 "LooiKit 命令字典 — verified UUIDs"
+- [ ] §2 命令验证表 → M1 spec §2 "命令字典 — verified bytes"
+- [ ] §3 传感事件 → M1 spec "SensorStream 解码器" 设计
+- [ ] §4 M1 设计含义 → M1 spec 各章节"prototype-driven decisions"
+- [ ] §5 已知未解 → M1 spec §7 "风险与开放问题"
