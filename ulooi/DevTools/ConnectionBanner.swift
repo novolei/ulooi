@@ -1,48 +1,43 @@
-import CoreBluetooth   // SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY: must
-                       // explicitly import CB to access CBPeripheral.name even
-                       // though BLECentral already imports it (transitive
-                       // imports no longer expose members in Swift 6 mode).
+import LooiKit
 import SwiftUI
 
-/// Green status banner shown when a peripheral is connected. Visible at the
-/// top of the DevTools surface across all tabs so the user can always tell
-/// at a glance whether we have an active BLE session — independent of the
-/// console output.
+/// Green status banner shown when the session has a connected peripheral.
+/// Visible at the top of the DevTools surface across all tabs so the user
+/// can always tell at a glance whether we have an active BLE session.
 ///
-/// Hidden when `central.connectedPeripheral` is nil.
+/// Hidden when `session.currentPeripheral` is nil (i.e. not yet connected).
 struct ConnectionBanner: View {
-    let central: BLECentral
+    let session: LooiSession
 
     var body: some View {
-        if let peripheral = central.connectedPeripheral {
+        if let peripheral = session.currentPeripheral {
             HStack(spacing: 10) {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.green)
                     .font(.title3)
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("Connected: \(peripheral.name ?? "Unknown")")
+                    Text("Connected: \(peripheral.name)")
                         .font(.caption.weight(.semibold))
                         .lineLimit(1)
 
                     HStack(spacing: 10) {
-                        Label("\(central.heartbeatTicks)", systemImage: "heart.fill")
+                        Label("\(session.motion.heartbeatTicks)", systemImage: "heart.fill")
                             .font(.caption2.monospacedDigit())
                             .foregroundStyle(.pink)
-                        Label("\(central.batteryPolls)", systemImage: "battery.100")
+                        Label("\(session.sensor.batteryPollCount)", systemImage: "battery.100")
                             .font(.caption2.monospacedDigit())
                             .foregroundStyle(.secondary)
-                        if let start = central.heartbeatStartTime {
-                            let elapsed = Int(Date().timeIntervalSince(start))
-                            Label("\(elapsed)s", systemImage: "clock")
+                        if let pct = session.sensor.batteryPercent {
+                            Label("\(pct)%", systemImage: "bolt.fill")
                                 .font(.caption2.monospacedDigit())
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.green)
                         }
                         // Current motion target — orange + bold when robot is
                         // actively moving (anything except STOP) so the user
                         // has an unmissable visual cue that the heartbeat is
                         // pushing a non-idle command.
-                        let motionLabel = central.currentMotion.label
+                        let motionLabel = session.motion.currentMotion.label
                         let isMoving = motionLabel != "STOP"
                         Text("→ \(motionLabel)")
                             .font(.caption2.weight(isMoving ? .heavy : .regular))
@@ -53,7 +48,7 @@ struct ConnectionBanner: View {
                 Spacer()
 
                 Button("Disconnect", role: .destructive) {
-                    central.disconnect()
+                    session.disconnect()
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -72,5 +67,5 @@ struct ConnectionBanner: View {
 }
 
 #Preview {
-    ConnectionBanner(central: BLECentral.shared)
+    ConnectionBanner(session: LooiBootstrap.shared.session)
 }

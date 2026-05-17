@@ -1,4 +1,5 @@
 import Foundation
+import LooiKit
 import OSLog
 
 /// Triple-channel instrumentation. Each event writes to:

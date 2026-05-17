@@ -6,13 +6,13 @@
 	objectVersion = 77;
 	objects = {
 
-/* Begin PBXFileReference section */
-		3130C61C2FB97A510016ABC0 /* ulooi.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ulooi.app; sourceTree = BUILT_PRODUCTS_DIR; };
-/* End PBXFileReference section */
-
 /* Begin PBXBuildFile section */
 		A1B2C3D40000000000000003 /* LooiKit in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D40000000000000002 /* LooiKit */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		3130C61C2FB97A510016ABC0 /* ulooi.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ulooi.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
 		3130C6292FB97A520016ABC0 /* Exceptions for "ulooi" folder in "ulooi" target */ = {
@@ -45,21 +45,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
-
-/* Begin XCLocalSwiftPackageReference section */
-		A1B2C3D40000000000000001 /* XCLocalSwiftPackageReference "Packages/LooiKit" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = Packages/LooiKit;
-		};
-/* End XCLocalSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		A1B2C3D40000000000000002 /* LooiKit */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = A1B2C3D40000000000000001 /* XCLocalSwiftPackageReference "Packages/LooiKit" */;
-			productName = LooiKit;
-		};
-/* End XCSwiftPackageProductDependency section */
 
 /* Begin PBXGroup section */
 		3130C6132FB97A510016ABC0 = {
@@ -390,6 +375,21 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		A1B2C3D40000000000000001 /* XCLocalSwiftPackageReference "Packages/LooiKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/LooiKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A1B2C3D40000000000000002 /* LooiKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1B2C3D40000000000000001 /* XCLocalSwiftPackageReference "Packages/LooiKit" */;
+			productName = LooiKit;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 3130C6142FB97A510016ABC0 /* Project object */;
 }
