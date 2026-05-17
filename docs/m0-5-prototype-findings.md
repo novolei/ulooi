@@ -87,16 +87,23 @@ App 启动 → BLE state → poweredOn → **auto-reconnect 自动触发**（基
 **Heartbeat 必要性：** Looi 期望 movement 命令每 ~30ms 一次（即使 STOP），不然在 ~2s 内主动 drop 连接。
 **Write mode：** 必须 `.withoutResponse`（match andrey-tut Python）；`.withResponse` 写 Looi 也 ack，但 motor 不会动 — 推测 Looi 用 write-type 区分 "keep-alive ack" vs "motor command".
 
-### 2c. Head (FED1)
+### 2c. Head (FED1) — pitch（不是 yaw）
+
+**关键修正：FED1 控制的是 head PITCH（俯仰/抬低头），不是 yaw（水平转向）。** Looi 的水平转向通过 FED0 movement 的 turn 字节实现（轮子原地 spin）。
 
 | 命令 | bytes | 实测 |
 |---|---|---|
 | center | `5A` | ✅ 头回中 |
-| full left | `00` | ✅ 头转到最左 |
-| full right | `FF` | ✅ 头转到最右 |
-| 中间值（如 `40`、`80`、`B0`） | 单 byte | ⚠️ 未实测，应可在 0..255 内任意位置 |
+| look up | `00` | ✅ 抬头 |
+| look down + auto-return | `FF` | ⚠️ **低头然后自动回中** — 推测 Looi 固件把 FF 当 "nod down gesture" 而不是持续保持位置；或者机械/扭矩限制无法在该极限位置长保持 |
+| 中间值（如 `40`、`80`、`B0`） | 单 byte | ⚠️ 未实测；推测可在 0..0x5A..0xFF 内任意 pitch 位置 |
 
 单次写即可，**不需要 heartbeat**。
+
+**Open questions：**
+- `0x00` 是否也有 auto-return 行为？（仅 `0xFF` 测到了，对称性未验证）
+- 中间值（如 `0x30` `0x80`）是 hold position 还是 gesture？
+- 是否有"head yaw"通过其它 char 控制（之前假设的 left/right 实际不存在；如果 Looi 真的有头部水平摇摆，可能是别的 char）
 
 ### 2d. Light (FED2)
 

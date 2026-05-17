@@ -31,16 +31,18 @@ extension LooiCommand {
         // overwritten by the next heartbeat tick. Motion is now controlled
         // via CommandView's "Motion control" section (uses MotionPreset.all).
 
-        // 2. Head
+        // 2. Head (FED1 = pitch, not yaw — corrected from initial mis-labeling)
         Preset(label: "Head — center (0x5A)",
                source: "andrey-tut", status: .verified,
                characteristic: LooiProtocol.Char.head, bytes: Head.center, note: nil),
-        Preset(label: "Head — full left (0x00)",
-               source: "andrey-tut", status: .verified,
-               characteristic: LooiProtocol.Char.head, bytes: Head.fullLeft, note: nil),
-        Preset(label: "Head — full right (0xFF)",
-               source: "andrey-tut", status: .verified,
-               characteristic: LooiProtocol.Char.head, bytes: Head.fullRight, note: nil),
+        Preset(label: "Head — look up (0x00)",
+               source: "andrey-tut+M0.5", status: .verified,
+               characteristic: LooiProtocol.Char.head, bytes: Head.lookUp,
+               note: "Head tilts back (pitch up). Yaw/turning is via FED0 wheel spin."),
+        Preset(label: "Head — look down (0xFF, auto-returns)",
+               source: "andrey-tut+M0.5", status: .verified,
+               characteristic: LooiProtocol.Char.head, bytes: Head.lookDown,
+               note: "Head tilts forward then auto-springs back to center. Likely a 'nod down' gesture in firmware, not a hold-at-pitch command."),
 
         // 3. Light
         Preset(label: "Light — on (0x03)",
