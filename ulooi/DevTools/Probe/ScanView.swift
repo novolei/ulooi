@@ -40,12 +40,23 @@ struct ScanView: View {
                                 central.startScan(serviceFilter: parseFilter())
                             }
                         }
+                        // Explicit buttonStyle is REQUIRED here. Without it, SwiftUI
+                        // treats a multi-Button HStack inside a Form Section row as a
+                        // single tap target — tapping anywhere on the row fires BOTH
+                        // Buttons in source order (Start Scan → Clear results), which
+                        // immediately cancels the scan before any didDiscover callback
+                        // can fire. Smoking gun: console showed
+                        //   Start Scan tapped → scan: start → Clear results tapped →
+                        //   scan: stop (found 0)
+                        // all triggered by a single tap. See [[feedback-swiftui-form-row-buttons]].
+                        .buttonStyle(.borderedProminent)
                         .disabled(central.state != .poweredOn)
                         Spacer()
                         Button("Clear results", role: .destructive) {
                             DevLog.event("ScanView: Clear results tapped", channel: DevLog.ui)
                             central.stopScan()
                         }
+                        .buttonStyle(.bordered)
                     }
                 }
 
