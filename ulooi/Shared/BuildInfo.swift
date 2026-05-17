@@ -19,5 +19,5 @@ import Foundation
 /// Phase that auto-injects `git rev-parse --short HEAD` at build time. Not
 /// done yet to avoid pbxproj edits while the project is fresh.
 enum BuildInfo {
-    static let label = "Probe v2: auto-reconnect scan-fallback + motion disabled when offline · 2026-05-17 · newer than 6e7b32e"
+    static let label = "Probe v2: cleanup pending connection on abort (motion-button bug fix) · 2026-05-17 · newer than 6fac162"
 }

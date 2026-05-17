@@ -247,9 +247,10 @@ final class BLECentral: NSObject {
             let foundViaScan = await scanForPairedLooi(timeout: .seconds(15))
             guard foundViaScan else {
                 DevLog.warn(
-                    "scan fallback: paired Looi did not advertise within 15s — aborting (use Scan tab to manually reconnect)",
+                    "scan fallback: paired Looi did not advertise within 15s — aborting (use Scan tab to manually reconnect; check that Looi is powered on and not paired to another device)",
                     channel: DevLog.ble
                 )
+                abandonPendingConnection()
                 return
             }
             // Connect again — this time iOS has a fresh peripheral reference
@@ -261,6 +262,7 @@ final class BLECentral: NSObject {
                     "scan fallback: connect after rescan still timed out — aborting",
                     channel: DevLog.ble
                 )
+                abandonPendingConnection()
                 return
             }
         }
@@ -298,6 +300,23 @@ final class BLECentral: NSObject {
             try? await Task.sleep(for: .milliseconds(100))
         }
         return false
+    }
+
+    /// Cancel a pending iOS connection attempt and clear our reference.
+    /// Critical when `connectAndAutoInitLooi` aborts: `connect()` sets
+    /// `connectedPeripheral` to a non-nil value BEFORE iOS actually
+    /// connects (so the queued connect can be cancelled). Without this
+    /// cleanup, UI components observing `connectedPeripheral != nil`
+    /// (ConnectionBanner, motion-button enabled state) would falsely
+    /// believe we're connected after a timeout, allowing the user to
+    /// "drive" a non-existent connection.
+    private func abandonPendingConnection() {
+        if let p = connectedPeripheral {
+            DevLog.event("abandonPendingConnection: cancelling iOS queued connect for \(p.identifier.uuidString.prefix(8))", channel: DevLog.ble)
+            central.cancelPeripheralConnection(p)
+            connectedPeripheral = nil
+        }
+        discoveredServices.removeAll()
     }
 
     /// Scan-fallback for the paired Looi when direct connect-by-UUID stalls.
