@@ -42,6 +42,14 @@ final class BLECentral: NSObject {
     // Only mutated in this file (startScan / stopScan).
     private(set) var isScanning: Bool = false
 
+    // Discovery filter. Default focuses on LOOI to avoid noise (your
+    // environment has 20+ BLE devices broadcasting). Set to empty string
+    // to show all discovered peripherals. Looi advertises with NO service
+    // UUIDs (`services=[no-svc-adv]`), so we can't use the OS-level
+    // `scanForPeripherals(withServices:)` filter — name match is the only
+    // signal. Comparison is case-insensitive substring.
+    var nameFilter: String = "LOOI"
+
     // Visible to delegate extensions in the same module.
     var central: CBCentralManager!
     let log = ProbeLog.shared

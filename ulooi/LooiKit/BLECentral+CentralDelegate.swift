@@ -25,6 +25,15 @@ extension BLECentral: CBCentralManagerDelegate {
         let mfg = advertisementData[CBAdvertisementDataManufacturerDataKey] as? Data
         let rssiInt = RSSI.intValue
         Task { @MainActor in
+            // Name filter: silently drop non-matching peripherals so the
+            // discoveries list + console aren't flooded with 20+ devices
+            // when we only care about LOOI. Empty filter = no filter.
+            let filter = self.nameFilter
+            if !filter.isEmpty,
+               !name.uppercased().contains(filter.uppercased()) {
+                return
+            }
+
             let now = Date()
             let existing = self.discoveries[id]
             let isNew = existing == nil

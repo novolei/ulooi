@@ -23,8 +23,12 @@ struct ScanView: View {
                     }
                 }
 
-                Section("Filter (optional, comma-separated 16-bit or full UUIDs)") {
-                    TextField("e.g. FFE0,180A or full UUID", text: $serviceFilterText)
+                Section("Filter") {
+                    Toggle("Only show LOOI devices", isOn: Binding(
+                        get: { !central.nameFilter.isEmpty },
+                        set: { central.nameFilter = $0 ? "LOOI" : "" }
+                    ))
+                    TextField("Service UUID filter (debug, optional)", text: $serviceFilterText)
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
                     HStack {
