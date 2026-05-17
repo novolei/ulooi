@@ -46,6 +46,13 @@ final class BLECentral: NSObject {
     var central: CBCentralManager!
     let log = ProbeLog.shared
 
+    // Motor heartbeat task — started by runLooiInit, cancelled by didDisconnect.
+    // Writes Movement.stop to FED0 every 30ms to satisfy Looi's keep-alive
+    // expectation. Without this, Looi drops the connection within seconds even
+    // after a successful INIT handshake (per andrey-tut: "Heartbeat required
+    // every ~30ms"). Mutable from the same file only — internal API.
+    var heartbeatTask: Task<Void, Never>?
+
     override init() {
         super.init()
         // queue=.main keeps delegate callbacks on the main actor (no thread hop).
@@ -91,6 +98,7 @@ final class BLECentral: NSObject {
     func disconnect() {
         guard let p = connectedPeripheral else { return }
         DevLog.event("disconnect: \(p.identifier)")
+        cancelMotorHeartbeat()
         central.cancelPeripheralConnection(p)
     }
 
@@ -153,17 +161,17 @@ final class BLECentral: NSObject {
         DevLog.event("connectAndAutoInitLooi: starting for \(id.uuidString.prefix(8))", channel: DevLog.ble)
         connect(id)
 
-        // Wait for didConnect + auto-discoverServices to fire.
-        // Typical iOS connect: 200-600ms.
-        try? await Task.sleep(for: .milliseconds(800))
+        // Wait for didConnect + auto-discoverServices to fire. iOS connect
+        // typically completes in 200-800ms but Round 1 of the user's first
+        // test showed 800ms was sometimes too tight — bumped to 1500ms.
+        try? await Task.sleep(for: .milliseconds(1500))
 
         guard let p = connectedPeripheral, p.state == .connected else {
-            DevLog.warn("connectAndAutoInitLooi: not connected after 800ms — aborting", channel: DevLog.ble)
+            DevLog.warn("connectAndAutoInitLooi: not connected after 1500ms — aborting", channel: DevLog.ble)
             return
         }
 
-        // Auto-discoverServices was triggered in didConnect; wait for the full
-        // service + characteristic enumeration to complete. iOS typically
+        // Wait for full service + characteristic enumeration. iOS typically
         // enumerates ~10 services × ~5 chars each in 1-2s.
         try? await Task.sleep(for: .milliseconds(1500))
 
@@ -204,10 +212,54 @@ final class BLECentral: NSObject {
         write(LooiProtocol.Handshake.phase2Data, to: handshake)
 
         DevLog.event(
-            "Looi INIT complete — connection should now stay alive. " +
-            "Try motion / head / light commands from Command tab.",
+            "Looi INIT complete — starting motor heartbeat to keep connection alive.",
             channel: DevLog.ble
         )
+
+        // CRITICAL: without this heartbeat, Looi drops the connection within
+        // ~3 seconds even after a successful INIT handshake. The Looi firmware
+        // expects movement commands every ~30ms — interpret silence as
+        // "controller died, drop the connection". Writes Movement.stop (00 00)
+        // so motors stay idle but the keep-alive contract is satisfied.
+        startMotorHeartbeat()
+    }
+
+    /// Start the 30ms motor heartbeat that keeps Looi connected. Always writes
+    /// `LooiCommand.Movement.stop` (00 00) — motors stay idle but Looi sees
+    /// activity. Cancelled automatically by `didDisconnect`. Safe to call
+    /// multiple times (cancels any prior task first).
+    func startMotorHeartbeat() {
+        cancelMotorHeartbeat()
+        heartbeatTask = Task { @MainActor in
+            DevLog.event("motor heartbeat: starting (FED0, 30ms, STOP)", channel: DevLog.ble)
+            var ticks = 0
+            while !Task.isCancelled {
+                guard let peripheral = self.connectedPeripheral,
+                      peripheral.state == .connected,
+                      let movementChar = self.findCharacteristic(LooiProtocol.Char.movement)
+                else {
+                    DevLog.event("motor heartbeat: connection lost or chars missing, stopping", channel: DevLog.ble)
+                    break
+                }
+                // .withoutResponse: don't wait for ack — keep loop fast at 30ms.
+                peripheral.writeValue(LooiCommand.Movement.stop, for: movementChar, type: .withoutResponse)
+                ticks += 1
+                // Periodic heartbeat log every ~3 seconds so we can SEE it's alive
+                // without flooding (would be 30 logs/sec otherwise).
+                if ticks.isMultiple(of: 100) {
+                    DevLog.event("motor heartbeat: \(ticks) ticks sent", channel: DevLog.ble)
+                }
+                try? await Task.sleep(for: .milliseconds(30))
+            }
+        }
+    }
+
+    /// Cancel the motor heartbeat task (called by didDisconnect or manual disconnect).
+    func cancelMotorHeartbeat() {
+        if heartbeatTask != nil {
+            heartbeatTask?.cancel()
+            heartbeatTask = nil
+        }
     }
 
     // MARK: - State translation (used by central delegate)

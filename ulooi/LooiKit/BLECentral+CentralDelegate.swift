@@ -90,6 +90,7 @@ extension BLECentral: CBCentralManagerDelegate {
         let msg = error?.localizedDescription ?? "(clean)"
         Task { @MainActor in
             DevLog.event("disconnected: \(pid) — \(msg)")
+            self.cancelMotorHeartbeat()  // stop the keep-alive loop
             self.connectedPeripheral = nil
             self.discoveredServices.removeAll()
         }
