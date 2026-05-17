@@ -372,17 +372,23 @@ final class BLECentral: NSObject {
         }
     }
 
-    /// Start the 30ms motor heartbeat that keeps Looi connected. Always writes
-    /// `LooiCommand.Movement.stop` (00 00) — motors stay idle but Looi sees
-    /// activity. Cancelled automatically by `didDisconnect`. Safe to call
-    /// multiple times (cancels any prior task first).
+    /// Start the 30ms motor heartbeat that keeps Looi connected. Reads
+    /// `currentMotion` on every tick — default `.stop`, replaced by user
+    /// taps in CommandView's Motion section. Cancelled automatically by
+    /// `didDisconnect`. Safe to call multiple times (cancels any prior task).
     ///
-    /// Uses `.withResponse` writes (slower than .withoutResponse but
-    /// guaranteed-delivery). Previously `.withoutResponse` was tried; suspected
-    /// of being silently queued/dropped by iOS BLE stack when the connection
-    /// isn't fully ready, which would explain why Looi still dropped despite
-    /// the heartbeat "running". `.withResponse` blocks until the peripheral
-    /// acks, so we KNOW each write reached Looi.
+    /// Uses `.withoutResponse` writes to match andrey-tut's working Python
+    /// implementation exactly:
+    ///     await client.write_gatt_char(CHAR_MOVE, move_cmd, response=False)
+    ///     await asyncio.sleep(0.03)
+    ///
+    /// Earlier we tried `.withResponse` because `.withoutResponse` seemed
+    /// to silently drop writes when the connection wasn't fully ready —
+    /// but that was BEFORE we added the parallel battery poll. With both
+    /// keep-alives (motor heartbeat + 4s battery poll) running, the Python
+    /// reference confirms `.withoutResponse` is the correct call and also
+    /// the only mode where Looi actually interprets the bytes as motor
+    /// commands. `.withResponse` Looi treats as keep-alive-only.
     func startMotorHeartbeat() {
         cancelMotorHeartbeat()
         heartbeatTicks = 0
@@ -406,14 +412,15 @@ final class BLECentral: NSObject {
                     )
                     break
                 }
-                // .withResponse: each write blocks the queue until ack — slower
-                // but guaranteed-delivery. Looi can't claim "no commands" while
-                // we're getting acks.
+                // .withoutResponse: matches andrey-tut Python's
+                // `response=False`. Looi seems to treat .withResponse writes
+                // as keep-alive only (acks consumed, motor commands ignored);
+                // only .withoutResponse triggers actual wheel movement.
                 //
                 // Reads currentMotion every tick so user input from the Motion
                 // control buttons takes effect on the very next heartbeat
                 // (≤30ms latency). Default value is .stop.
-                peripheral.writeValue(self.currentMotion.data, for: movementChar, type: .withResponse)
+                peripheral.writeValue(self.currentMotion.data, for: movementChar, type: .withoutResponse)
                 self.heartbeatTicks += 1
                 // Log every tick for first 10 (to see start-up timing) then
                 // every 25 (to confirm ongoing).
