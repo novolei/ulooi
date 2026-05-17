@@ -96,8 +96,9 @@ extension BLECentral: CBCentralManagerDelegate {
                 let elapsed = String(format: "%.2f", Date().timeIntervalSince(start))
                 return " (heartbeat: \(self.heartbeatTicks) ticks over \(elapsed)s before disconnect)"
             }()
-            DevLog.event("disconnected: \(pid) — \(msg)\(hbInfo)")
-            self.cancelMotorHeartbeat()  // stop the keep-alive loop
+            DevLog.event("disconnected: \(pid) — \(msg)\(hbInfo) (battery polls: \(self.batteryPolls))")
+            self.cancelMotorHeartbeat()  // stop the motor keep-alive loop
+            self.cancelBatteryPoll()     // stop the battery poll keep-alive loop
             self.connectedPeripheral = nil
             self.discoveredServices.removeAll()
         }

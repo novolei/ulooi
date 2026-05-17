@@ -58,6 +58,14 @@ final class BLECentral: NSObject {
     var heartbeatTicks: Int = 0
     var heartbeatStartTime: Date?
 
+    // Battery polling task — parallel keep-alive that andrey-tut's waasd.py
+    // runs alongside the motor heartbeat. Reads FED8 every 4s. Likely
+    // required for Looi to consider the connection "actively monitored",
+    // not just "receiving writes". Started by runLooiInit, cancelled on
+    // disconnect.
+    var batteryPollTask: Task<Void, Never>?
+    var batteryPolls: Int = 0
+
     override init() {
         super.init()
         // queue=.main keeps delegate callbacks on the main actor (no thread hop).
@@ -104,6 +112,7 @@ final class BLECentral: NSObject {
         guard let p = connectedPeripheral else { return }
         DevLog.event("disconnect: \(p.identifier)")
         cancelMotorHeartbeat()
+        cancelBatteryPoll()
         central.cancelPeripheralConnection(p)
     }
 
@@ -180,7 +189,27 @@ final class BLECentral: NSObject {
         // enumerates ~10 services × ~5 chars each in 1-2s.
         try? await Task.sleep(for: .milliseconds(1500))
 
+        // Step 0 of andrey-tut's sequence (we previously skipped this):
+        // read the standard 2A29 (Manufacturer Name) char. Comment in
+        // waasd.py: "Wake up macOS Bluetooth cache". On iOS it may not be
+        // load-bearing but it's cheap and mirrors the working Python flow.
+        await readDeviceInfoManufacturer()
+
         await runLooiInit()
+    }
+
+    /// Read the standard Device Info Service Manufacturer Name characteristic
+    /// (0x2A29). Andrey-tut's waasd.py does this BEFORE the FEDA handshake;
+    /// wrapped in try/except in Python — failures are ignored.
+    func readDeviceInfoManufacturer() async {
+        guard let char = findCharacteristic(LooiProtocol.Char.deviceInfoManufacturer),
+              let peripheral = connectedPeripheral else {
+            DevLog.warn("readDeviceInfoManufacturer: 2A29 char or peripheral not available", channel: DevLog.ble)
+            return
+        }
+        DevLog.event("step 0/4: read 2A29 manufacturer (wake-up read, match andrey-tut)", channel: DevLog.ble)
+        peripheral.readValue(for: char)
+        try? await Task.sleep(for: .milliseconds(150))
     }
 
     /// Run the Looi INIT handshake against an already-connected peripheral
@@ -206,27 +235,33 @@ final class BLECentral: NSObject {
 
         DevLog.event("Looi INIT 1/3 — writing 0x01 to FEDA", channel: DevLog.ble)
         write(LooiProtocol.Handshake.phase1Data, to: handshake)
-        try? await Task.sleep(for: .milliseconds(150))
+        try? await Task.sleep(for: .milliseconds(100))  // match andrey-tut's 0.1s
 
         DevLog.event("Looi INIT 2/3 — subscribing FED5 + FED9", channel: DevLog.ble)
         subscribe(to: sensors)
         subscribe(to: telemetry)
-        try? await Task.sleep(for: .milliseconds(150))
+        // Bumped 150 → 300ms. CBPeripheral.setNotifyValue returns immediately
+        // and iOS performs the descriptor write asynchronously. The Python
+        // equivalent (bleak.start_notify) blocks until the descriptor write
+        // completes, so in waasd.py the next write naturally serialized
+        // behind it. On iOS we need a longer pause to give iOS time to
+        // actually enable both notifications before sending 0x03.
+        try? await Task.sleep(for: .milliseconds(300))
 
         DevLog.event("Looi INIT 3/3 — writing 0x03 to FEDA", channel: DevLog.ble)
         write(LooiProtocol.Handshake.phase2Data, to: handshake)
 
         DevLog.event(
-            "Looi INIT complete — starting motor heartbeat to keep connection alive.",
+            "Looi INIT complete — starting motor heartbeat + battery poll keep-alives.",
             channel: DevLog.ble
         )
 
-        // CRITICAL: without this heartbeat, Looi drops the connection within
-        // ~3 seconds even after a successful INIT handshake. The Looi firmware
-        // expects movement commands every ~30ms — interpret silence as
-        // "controller died, drop the connection". Writes Movement.stop (00 00)
-        // so motors stay idle but the keep-alive contract is satisfied.
+        // andrey-tut runs BOTH of these as parallel background tasks. Just one
+        // (motor heartbeat) isn't enough — Looi drops after ~2s with only
+        // writes to FED0. The battery POLL on FED8 every 4s is the second
+        // missing piece (per re-read of waasd.py).
         startMotorHeartbeat()
+        startBatteryPoll()
     }
 
     /// Start the 30ms motor heartbeat that keeps Looi connected. Always writes
@@ -289,6 +324,39 @@ final class BLECentral: NSObject {
         if heartbeatTask != nil {
             heartbeatTask?.cancel()
             heartbeatTask = nil
+        }
+    }
+
+    /// Start the 4-second battery poll task. Reads FED8 (Looi's custom battery
+    /// characteristic) at the same cadence andrey-tut's waasd.py does. Likely
+    /// required as a secondary keep-alive signal — without it, motor heartbeat
+    /// alone is insufficient to keep Looi connected past ~2.2s.
+    func startBatteryPoll() {
+        cancelBatteryPoll()
+        batteryPolls = 0
+        batteryPollTask = Task { @MainActor in
+            DevLog.event("battery poll: starting (FED8, 4s interval, match andrey-tut)", channel: DevLog.ble)
+            while !Task.isCancelled {
+                guard let peripheral = self.connectedPeripheral,
+                      peripheral.state == .connected,
+                      let batteryChar = self.findCharacteristic(LooiProtocol.Char.battery)
+                else {
+                    DevLog.event("battery poll: connection lost after \(self.batteryPolls) polls", channel: DevLog.ble)
+                    break
+                }
+                peripheral.readValue(for: batteryChar)
+                self.batteryPolls += 1
+                DevLog.event("battery poll: read \(self.batteryPolls) (FED8)", channel: DevLog.ble)
+                try? await Task.sleep(for: .seconds(4))
+            }
+        }
+    }
+
+    /// Cancel the battery poll task (called by didDisconnect or manual disconnect).
+    func cancelBatteryPoll() {
+        if batteryPollTask != nil {
+            batteryPollTask?.cancel()
+            batteryPollTask = nil
         }
     }
 
