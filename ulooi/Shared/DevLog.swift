@@ -16,10 +16,16 @@ import OSLog
 /// Filter Xcode console with: `[ulooi]` substring.
 /// Filter Console.app with: subsystem == "ai.if2.ulooi"
 enum DevLog {
-    // Category-specific loggers — match by category in Console.app
-    static let ble = Logger(subsystem: "ai.if2.ulooi", category: "ble")
-    static let ui  = Logger(subsystem: "ai.if2.ulooi", category: "ui")
-    static let probe = Logger(subsystem: "ai.if2.ulooi", category: "probe")
+    // Category-specific loggers — match by category in Console.app.
+    // `nonisolated` because: (1) `Logger` is `Sendable`; (2) the project sets
+    // `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` which would otherwise make
+    // these implicitly @MainActor, blocking their use as default parameter
+    // values (`channel: Logger = probe` evaluates at the call site, which may
+    // be a `nonisolated` context like a CB delegate). Same pattern as
+    // `BLECentral.translate(_:)` (see cb1c7a9).
+    nonisolated static let ble = Logger(subsystem: "ai.if2.ulooi", category: "ble")
+    nonisolated static let ui  = Logger(subsystem: "ai.if2.ulooi", category: "ui")
+    nonisolated static let probe = Logger(subsystem: "ai.if2.ulooi", category: "probe")
 
     @MainActor
     static func event(_ message: String, channel: Logger = probe) {
