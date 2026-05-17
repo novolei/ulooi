@@ -89,7 +89,14 @@ extension BLECentral: CBCentralManagerDelegate {
         let pid = peripheral.identifier
         let msg = error?.localizedDescription ?? "(clean)"
         Task { @MainActor in
-            DevLog.event("disconnected: \(pid) — \(msg)")
+            let hbInfo: String = {
+                guard let start = self.heartbeatStartTime, self.heartbeatTicks > 0 else {
+                    return " (no heartbeat ticks were sent)"
+                }
+                let elapsed = String(format: "%.2f", Date().timeIntervalSince(start))
+                return " (heartbeat: \(self.heartbeatTicks) ticks over \(elapsed)s before disconnect)"
+            }()
+            DevLog.event("disconnected: \(pid) — \(msg)\(hbInfo)")
             self.cancelMotorHeartbeat()  // stop the keep-alive loop
             self.connectedPeripheral = nil
             self.discoveredServices.removeAll()

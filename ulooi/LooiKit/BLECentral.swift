@@ -53,6 +53,11 @@ final class BLECentral: NSObject {
     // every ~30ms"). Mutable from the same file only — internal API.
     var heartbeatTask: Task<Void, Never>?
 
+    // Diagnostic counters for the heartbeat — visible to delegate extensions
+    // so didDisconnect can log how many ticks fired before Looi dropped us.
+    var heartbeatTicks: Int = 0
+    var heartbeatStartTime: Date?
+
     override init() {
         super.init()
         // queue=.main keeps delegate callbacks on the main actor (no thread hop).
@@ -228,26 +233,51 @@ final class BLECentral: NSObject {
     /// `LooiCommand.Movement.stop` (00 00) — motors stay idle but Looi sees
     /// activity. Cancelled automatically by `didDisconnect`. Safe to call
     /// multiple times (cancels any prior task first).
+    ///
+    /// Uses `.withResponse` writes (slower than .withoutResponse but
+    /// guaranteed-delivery). Previously `.withoutResponse` was tried; suspected
+    /// of being silently queued/dropped by iOS BLE stack when the connection
+    /// isn't fully ready, which would explain why Looi still dropped despite
+    /// the heartbeat "running". `.withResponse` blocks until the peripheral
+    /// acks, so we KNOW each write reached Looi.
     func startMotorHeartbeat() {
         cancelMotorHeartbeat()
+        heartbeatTicks = 0
+        heartbeatStartTime = Date()
         heartbeatTask = Task { @MainActor in
-            DevLog.event("motor heartbeat: starting (FED0, 30ms, STOP)", channel: DevLog.ble)
-            var ticks = 0
+            DevLog.event(
+                "motor heartbeat: starting (FED0, 30ms target, STOP, .withResponse)",
+                channel: DevLog.ble
+            )
             while !Task.isCancelled {
                 guard let peripheral = self.connectedPeripheral,
                       peripheral.state == .connected,
                       let movementChar = self.findCharacteristic(LooiProtocol.Char.movement)
                 else {
-                    DevLog.event("motor heartbeat: connection lost or chars missing, stopping", channel: DevLog.ble)
+                    let elapsed = self.heartbeatStartTime.map {
+                        String(format: "%.2f", Date().timeIntervalSince($0))
+                    } ?? "?"
+                    DevLog.event(
+                        "motor heartbeat: connection lost after \(self.heartbeatTicks) ticks (\(elapsed)s)",
+                        channel: DevLog.ble
+                    )
                     break
                 }
-                // .withoutResponse: don't wait for ack — keep loop fast at 30ms.
-                peripheral.writeValue(LooiCommand.Movement.stop, for: movementChar, type: .withoutResponse)
-                ticks += 1
-                // Periodic heartbeat log every ~3 seconds so we can SEE it's alive
-                // without flooding (would be 30 logs/sec otherwise).
-                if ticks.isMultiple(of: 100) {
-                    DevLog.event("motor heartbeat: \(ticks) ticks sent", channel: DevLog.ble)
+                // .withResponse: each write blocks the queue until ack — slower
+                // but guaranteed-delivery. Looi can't claim "no commands" while
+                // we're getting acks.
+                peripheral.writeValue(LooiCommand.Movement.stop, for: movementChar, type: .withResponse)
+                self.heartbeatTicks += 1
+                // Log every tick for first 10 (to see start-up timing) then
+                // every 25 (to confirm ongoing).
+                if self.heartbeatTicks <= 10 || self.heartbeatTicks.isMultiple(of: 25) {
+                    let elapsed = self.heartbeatStartTime.map {
+                        String(format: "%.2f", Date().timeIntervalSince($0))
+                    } ?? "?"
+                    DevLog.event(
+                        "motor heartbeat: tick \(self.heartbeatTicks) @ \(elapsed)s",
+                        channel: DevLog.ble
+                    )
                 }
                 try? await Task.sleep(for: .milliseconds(30))
             }
