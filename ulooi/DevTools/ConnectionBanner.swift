@@ -1,3 +1,7 @@
+import CoreBluetooth   // SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY: must
+                       // explicitly import CB to access CBPeripheral.name even
+                       // though BLECentral already imports it (transitive
+                       // imports no longer expose members in Swift 6 mode).
 import SwiftUI
 
 /// Green status banner shown when a peripheral is connected. Visible at the
