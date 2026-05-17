@@ -47,8 +47,4 @@ final class ProbeLog {
     }
 }
 
-extension Data {
-    var hexEncoded: String {
-        map { String(format: "%02x", $0) }.joined(separator: " ")
-    }
-}
+// `Data.hexEncoded` now lives in `Shared/DataHexCodec.swift`.

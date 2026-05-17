@@ -168,27 +168,7 @@ private struct PresetRow: View {
     }
 }
 
-// MARK: - Hex helper
-
-extension Data {
-    init?(hexString: String) {
-        let cleaned = hexString
-            .replacingOccurrences(of: " ", with: "")
-            .replacingOccurrences(of: "-", with: "")
-            .replacingOccurrences(of: ":", with: "")
-            .replacingOccurrences(of: "\n", with: "")
-        guard cleaned.count.isMultiple(of: 2) else { return nil }
-        var bytes: [UInt8] = []
-        var idx = cleaned.startIndex
-        while idx < cleaned.endIndex {
-            let next = cleaned.index(idx, offsetBy: 2)
-            guard let byte = UInt8(cleaned[idx..<next], radix: 16) else { return nil }
-            bytes.append(byte)
-            idx = next
-        }
-        self.init(bytes)
-    }
-}
+// `Data.init?(hexString:)` and `Data.hexEncoded` live in `Shared/DataHexCodec.swift`.
 
 #Preview {
     CommandView(central: BLECentral.shared, log: ProbeLog.shared)
