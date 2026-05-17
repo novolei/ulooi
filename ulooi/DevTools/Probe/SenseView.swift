@@ -34,7 +34,7 @@ struct SenseView: View {
                 Section("Annotate event") {
                     TextField("e.g. 'I touched the head now'", text: $annotation)
                     Button("Mark in log") {
-                        log.info("== EVENT == \(annotation)")
+                        DevLog.event("== EVENT == \(annotation)", channel: DevLog.ui)
                         annotation = ""
                     }
                     .disabled(annotation.isEmpty)

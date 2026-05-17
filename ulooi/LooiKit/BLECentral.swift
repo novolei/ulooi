@@ -56,10 +56,10 @@ final class BLECentral: NSObject {
 
     func startScan(serviceFilter: [CBUUID]? = nil) {
         guard state == .poweredOn else {
-            log.warn("startScan: BLE not powered on (state=\(state.rawValue))")
+            DevLog.warn("startScan: BLE not powered on (state=\(state.rawValue))")
             return
         }
-        log.info("scan: start (filter=\(serviceFilter?.map { $0.uuidString }.joined(separator: ",") ?? "any"))")
+        DevLog.event("scan: start (filter=\(serviceFilter?.map { $0.uuidString }.joined(separator: ",") ?? "any"))")
         discoveries.removeAll()
         isScanning = true
         central.scanForPeripherals(
@@ -70,7 +70,7 @@ final class BLECentral: NSObject {
 
     func stopScan() {
         guard isScanning else { return }
-        log.info("scan: stop (found \(discoveries.count))")
+        DevLog.event("scan: stop (found \(discoveries.count))")
         central.stopScan()
         isScanning = false
     }
@@ -79,10 +79,10 @@ final class BLECentral: NSObject {
 
     func connect(_ id: UUID) {
         guard let peripheral = central.retrievePeripherals(withIdentifiers: [id]).first else {
-            log.error("connect: peripheral \(id) not retrievable; scan first")
+            DevLog.error("connect: peripheral \(id) not retrievable; scan first")
             return
         }
-        log.info("connect: \(peripheral.identifier) name=\(peripheral.name ?? "?")")
+        DevLog.event("connect: \(peripheral.identifier) name=\(peripheral.name ?? "?")")
         peripheral.delegate = self
         connectedPeripheral = peripheral
         central.connect(peripheral, options: nil)
@@ -90,7 +90,7 @@ final class BLECentral: NSObject {
 
     func disconnect() {
         guard let p = connectedPeripheral else { return }
-        log.info("disconnect: \(p.identifier)")
+        DevLog.event("disconnect: \(p.identifier)")
         central.cancelPeripheralConnection(p)
     }
 
@@ -98,10 +98,10 @@ final class BLECentral: NSObject {
 
     func discoverAllServices() {
         guard let p = connectedPeripheral, p.state == .connected else {
-            log.warn("discoverAllServices: not connected")
+            DevLog.warn("discoverAllServices: not connected")
             return
         }
-        log.info("discoverServices: requesting all")
+        DevLog.event("discoverServices: requesting all")
         discoveredServices.removeAll()
         p.discoverServices(nil)
     }
@@ -110,22 +110,22 @@ final class BLECentral: NSObject {
 
     func write(_ data: Data, to characteristic: CBCharacteristic, type: CBCharacteristicWriteType = .withResponse) {
         guard let p = connectedPeripheral else {
-            log.warn("write: not connected")
+            DevLog.warn("write: not connected")
             return
         }
-        log.bytes("write→\(characteristic.uuid.uuidString)", data)
+        DevLog.bytes("write→\(characteristic.uuid.uuidString)", data)
         p.writeValue(data, for: characteristic, type: type)
     }
 
     func subscribe(to characteristic: CBCharacteristic) {
         guard let p = connectedPeripheral else { return }
-        log.info("subscribe: \(characteristic.uuid.uuidString)")
+        DevLog.event("subscribe: \(characteristic.uuid.uuidString)")
         p.setNotifyValue(true, for: characteristic)
     }
 
     func unsubscribe(from characteristic: CBCharacteristic) {
         guard let p = connectedPeripheral else { return }
-        log.info("unsubscribe: \(characteristic.uuid.uuidString)")
+        DevLog.event("unsubscribe: \(characteristic.uuid.uuidString)")
         p.setNotifyValue(false, for: characteristic)
     }
 

@@ -7,7 +7,7 @@ extension BLECentral: CBCentralManagerDelegate {
         let newState = BLECentral.translate(central.state)
         Task { @MainActor in
             self.state = newState
-            self.log.info("BLE state → \(newState.rawValue)")
+            DevLog.event("BLE state → \(newState.rawValue)")
         }
     }
 
@@ -25,6 +25,7 @@ extension BLECentral: CBCentralManagerDelegate {
         let mfg = advertisementData[CBAdvertisementDataManufacturerDataKey] as? Data
         let rssiInt = RSSI.intValue
         Task { @MainActor in
+            let alreadyKnown = self.discoveries[id] != nil
             self.discoveries[id] = Discovery(
                 id: id,
                 name: name,
@@ -33,13 +34,23 @@ extension BLECentral: CBCentralManagerDelegate {
                 manufacturerData: mfg,
                 lastSeen: Date()
             )
+            // First sighting of a peripheral — log via DevLog (Xcode console + ProbeLog).
+            // Subsequent ad packets from the same peripheral are silent to avoid spam
+            // (scan can fire 10+ packets/sec per device with allowDuplicates=true).
+            if !alreadyKnown {
+                let svcDesc = services.isEmpty ? "no-svc-adv" : services.map { $0.uuidString }.joined(separator: ",")
+                DevLog.event(
+                    "didDiscover: name=\(name) id=\(id.uuidString.prefix(8)) rssi=\(rssiInt) services=[\(svcDesc)]",
+                    channel: DevLog.ble
+                )
+            }
         }
     }
 
     nonisolated func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         let pid = peripheral.identifier
         Task { @MainActor in
-            self.log.info("connected: \(pid)")
+            DevLog.event("connected: \(pid)")
         }
     }
 
@@ -47,7 +58,7 @@ extension BLECentral: CBCentralManagerDelegate {
         let msg = error?.localizedDescription ?? "unknown"
         let pid = peripheral.identifier
         Task { @MainActor in
-            self.log.error("connect failed: \(pid) — \(msg)")
+            DevLog.error("connect failed: \(pid) — \(msg)")
             self.connectedPeripheral = nil
         }
     }
@@ -56,7 +67,7 @@ extension BLECentral: CBCentralManagerDelegate {
         let pid = peripheral.identifier
         let msg = error?.localizedDescription ?? "(clean)"
         Task { @MainActor in
-            self.log.info("disconnected: \(pid) — \(msg)")
+            DevLog.event("disconnected: \(pid) — \(msg)")
             self.connectedPeripheral = nil
             self.discoveredServices.removeAll()
         }

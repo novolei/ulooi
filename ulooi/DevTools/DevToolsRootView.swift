@@ -25,6 +25,21 @@ struct DevToolsRootView: View {
             LogsView(log: log)
                 .tabItem { Label("Logs", systemImage: "doc.text") }
         }
+        .overlay(alignment: .top) {
+            // Build watermark — verify Cmd+R deployed the right code. See BuildInfo.swift.
+            Text(BuildInfo.label)
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(.yellow.opacity(0.92))
+                .foregroundStyle(.black)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .padding(.top, 4)
+                .allowsHitTesting(false)
+        }
+        .onAppear {
+            DevLog.event("DevToolsRootView appeared — build=\(BuildInfo.label)", channel: DevLog.ui)
+        }
     }
 }
 

@@ -29,6 +29,11 @@ struct ScanView: View {
                         .autocorrectionDisabled()
                     HStack {
                         Button(central.isScanning ? "Stop Scan" : "Start Scan") {
+                            DevLog.event(
+                                "ScanView: \(central.isScanning ? "Stop" : "Start") Scan tapped " +
+                                "(state=\(central.state.rawValue), isScanning=\(central.isScanning))",
+                                channel: DevLog.ui
+                            )
                             if central.isScanning {
                                 central.stopScan()
                             } else {
@@ -38,6 +43,7 @@ struct ScanView: View {
                         .disabled(central.state != .poweredOn)
                         Spacer()
                         Button("Clear results", role: .destructive) {
+                            DevLog.event("ScanView: Clear results tapped", channel: DevLog.ui)
                             central.stopScan()
                         }
                     }

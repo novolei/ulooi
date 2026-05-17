@@ -6,15 +6,15 @@ extension BLECentral: CBPeripheralDelegate {
     nonisolated func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         if let error {
             let msg = error.localizedDescription
-            Task { @MainActor in self.log.error("discoverServices: \(msg)") }
+            Task { @MainActor in DevLog.error("discoverServices: \(msg)") }
             return
         }
         let services = peripheral.services ?? []
         Task { @MainActor in
             self.discoveredServices = services
-            self.log.info("services: \(services.count)")
+            DevLog.event("services: \(services.count)")
             for s in services {
-                self.log.info("  service \(s.uuid.uuidString)")
+                DevLog.event("  service \(s.uuid.uuidString)")
                 peripheral.discoverCharacteristics(nil, for: s)
             }
         }
@@ -24,16 +24,16 @@ extension BLECentral: CBPeripheralDelegate {
         if let error {
             let msg = error.localizedDescription
             let sid = service.uuid.uuidString
-            Task { @MainActor in self.log.error("discoverChars[\(sid)]: \(msg)") }
+            Task { @MainActor in DevLog.error("discoverChars[\(sid)]: \(msg)") }
             return
         }
         let chars = service.characteristics ?? []
         let sid = service.uuid.uuidString
         Task { @MainActor in
-            self.log.info("  \(chars.count) chars for service \(sid)")
+            DevLog.event("  \(chars.count) chars for service \(sid)")
             for c in chars {
                 let props = CharacteristicProperties(rawValue: c.properties.rawValue)
-                self.log.info("    char \(c.uuid.uuidString)  props=[\(props.description)]")
+                DevLog.event("    char \(c.uuid.uuidString)  props=[\(props.description)]")
             }
             // Trigger Observable update by re-assigning (services list reflects new chars)
             self.discoveredServices = peripheral.services ?? []
@@ -43,13 +43,13 @@ extension BLECentral: CBPeripheralDelegate {
     nonisolated func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
         if let error {
             let msg = error.localizedDescription
-            Task { @MainActor in self.log.error("read \(characteristic.uuid): \(msg)") }
+            Task { @MainActor in DevLog.error("read \(characteristic.uuid): \(msg)") }
             return
         }
         guard let value = characteristic.value else { return }
         let label = characteristic.uuid.uuidString
         Task { @MainActor in
-            self.log.bytes("notify←\(label)", value)
+            DevLog.bytes("notify←\(label)", value)
         }
     }
 
@@ -57,7 +57,7 @@ extension BLECentral: CBPeripheralDelegate {
         if let error {
             let msg = error.localizedDescription
             let cid = characteristic.uuid.uuidString
-            Task { @MainActor in self.log.error("write \(cid) failed: \(msg)") }
+            Task { @MainActor in DevLog.error("write \(cid) failed: \(msg)") }
         }
     }
 }
