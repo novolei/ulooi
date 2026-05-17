@@ -14,7 +14,7 @@
 | Milestone | What | State |
 |---|---|---|
 | **M0** | Umbrella spec | ✅ approved — see [`2026-05-17-ulooi-design.md`](https://github.com/novolei/uclaw-new/blob/main/docs/superpowers/specs/2026-05-17-ulooi-design.md) (canonical, lives in UCLAW repo) |
-| **M0.5** | Hardware reachability prototype (throwaway, 1-2 days) | pending |
+| **M0.5** | Hardware reachability prototype (probe app — DevTools surface) | 🚧 in progress — scaffold ready, hardware probe pending. See [`docs/m0-5-prototype-findings.md`](docs/m0-5-prototype-findings.md). |
 | **M1** | LooiKit + iOS shell + pairing UX (no UCLAW dep) | pending |
 | **M2** | UCLAW transport layer (WebSocket + pairing) | pending |
 | **M3** | Voice loop (S1 体验) | pending |
@@ -57,7 +57,33 @@ iOS implementation: **Pure SwiftUI / Swift**, no Rust on iOS. Protocol consisten
 
 ## Development
 
-Project is in early scaffold. Run `xed ulooi.xcodeproj` to open in Xcode.
+```bash
+xed ulooi.xcodeproj    # open in Xcode 16+
+# Cmd+R to build & run on a real iPhone (BLE doesn't work in simulator)
+```
+
+**Current state (M0.5):** The app boots directly into the **DevTools probe surface** — a 5-tab tool for reverse-engineering Looi's BLE protocol against the current firmware. Tabs: Scan / Inspect / Send / Sense / Logs. In M1 this will be demoted to Settings → Developer, and the production UI will take over the root.
+
+Probe findings are recorded in [`docs/m0-5-prototype-findings.md`](docs/m0-5-prototype-findings.md) as you go; the doc becomes input to the M1 LooiKit spec.
+
+### Module layout (M0.5)
+
+```
+ulooi/ulooi/
+├── ulooiApp.swift / ContentView.swift   — app entry, routes to DevTools
+├── DevTools/                            — probe surface (Settings → Developer in M1)
+│   ├── DevToolsRootView.swift           — TabView container
+│   └── Probe/
+│       ├── ScanView.swift               — BLE peripheral scanner
+│       ├── InspectView.swift            — GATT topology browser
+│       ├── CommandView.swift            — send raw bytes / preset commands
+│       ├── SenseView.swift              — subscribe to notify characteristics
+│       ├── LogsView.swift               — live RAW / INFO / WARN / ERR log viewer
+│       └── ProbeLog.swift               — shared logging
+└── LooiKit/                             — early skeleton (will move to Packages/LooiKit in M1)
+    ├── BLECentral.swift                 — CoreBluetooth wrapper (@MainActor @Observable)
+    └── LooiCommand.swift                — reference command dict (UNVERIFIED in M0.5)
+```
 
 ## License
 
