@@ -37,6 +37,31 @@ public final class LooiSession {
     /// cliffState / imu / batteryPercent / lastTouchEvent.
     public let sensor: SensorController
 
+    // MARK: - Reconnect policy + persisted pairing
+
+    public let reconnectPolicy: ReconnectPolicy
+
+    /// UserDefaults-backed last paired peripheral. Automatically attempted
+    /// first on reconnect and on next app launch.
+    public var pairedPeripheralID: UUID? {
+        get {
+            UserDefaults.standard.string(forKey: Self.pairedKey)
+                .flatMap(UUID.init(uuidString:))
+        }
+        set {
+            if let v = newValue {
+                UserDefaults.standard.set(v.uuidString, forKey: Self.pairedKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Self.pairedKey)
+            }
+        }
+    }
+
+    /// Clear the stored paired peripheral (e.g. on factory-reset flow).
+    public func forgetPairing() { pairedPeripheralID = nil }
+
+    private static let pairedKey = "looikit.last.paired.peripheral.id"
+
     // MARK: - Private fields
 
     private let transport: BLETransport
@@ -51,11 +76,18 @@ public final class LooiSession {
     @ObservationIgnored nonisolated(unsafe) private var scanTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var connectTask: Task<Void, Never>?
     @ObservationIgnored nonisolated(unsafe) private var disconnectionWatcher: Task<Void, Never>?
+    @ObservationIgnored nonisolated(unsafe) private var reconnectTask: Task<Void, Never>?
+
+    /// Set to true during user-initiated disconnect so that transport
+    /// disconnection events (which fire when we call transport.disconnect())
+    /// do not kick off a reconnect loop.
+    private var isDisconnecting = false
 
     // MARK: - Init
 
-    public init(transport: BLETransport) {
+    public init(transport: BLETransport, reconnectPolicy: ReconnectPolicy = .default) {
         self.transport = transport
+        self.reconnectPolicy = reconnectPolicy
         self.machine = SessionStateMachine()
 
         // Two-step capture pattern: construct MotionController with a stub
@@ -101,6 +133,7 @@ public final class LooiSession {
         disconnectionWatcher?.cancel()
         scanTask?.cancel()
         connectTask?.cancel()
+        reconnectTask?.cancel()
         // heartbeatTask is owned by MotionController; its deinit cancels it.
     }
 
@@ -129,11 +162,18 @@ public final class LooiSession {
     public func disconnect() {
         Task { @MainActor [weak self] in
             guard let self else { return }
+            // Flag user intent before calling transport.disconnect() — the
+            // transport fires a disconnection event synchronously in tests,
+            // and handleDisconnection must not start a reconnect loop for a
+            // user-initiated disconnect.
+            self.isDisconnecting = true
             self.scanTask?.cancel()
             self.connectTask?.cancel()
+            self.reconnectTask?.cancel()
             await self.transport.disconnect()
             try? self.machine.transition(to: .disconnected)
             self.currentPeripheral = nil
+            self.isDisconnecting = false
         }
     }
 
@@ -210,14 +250,56 @@ public final class LooiSession {
         }
 
         try? machine.transition(to: .ready)
+        // Persist the paired peripheral so reconnect can target it directly.
+        pairedPeripheralID = id
     }
 
     /// Called when the transport fires a disconnection event.
-    /// Task 11 upgrades this to .reconnecting with exponential backoff.
+    /// Enters .reconnecting with exponential backoff unless the disconnect
+    /// was user-initiated (isDisconnecting) or the session is already .disconnected.
     private func handleDisconnection(_ reason: DisconnectionReason) async {
-        logger.info("disconnection (\(String(describing: reason), privacy: .public)) from \(self.state.description, privacy: .public)")
-        try? machine.transition(to: .disconnected)
-        currentPeripheral = nil
+        logger.info("disconnection: \(String(describing: reason), privacy: .public) from \(self.state.description, privacy: .public)")
+        // Guard: do not start a reconnect loop for user-initiated disconnects
+        // or if we're already in .disconnected state.
+        guard !isDisconnecting, state != .disconnected else { return }
+
+        reconnectTask?.cancel()
+        reconnectTask = Task { [weak self] in
+            guard let self else { return }
+            await self.runReconnectLoop()
+        }
+    }
+
+    private func runReconnectLoop() async {
+        var attempt = 1
+        while !Task.isCancelled {
+            do {
+                try machine.transition(to: .reconnecting(attempt: attempt))
+            } catch {
+                try? machine.transition(to: .disconnected)
+                return
+            }
+
+            guard let delay = reconnectPolicy.delay(forAttempt: attempt) else {
+                // Exhausted the backoff window — give up.
+                try? machine.transition(to: .disconnected)
+                return
+            }
+            try? await Task.sleep(for: delay)
+            if Task.isCancelled { return }
+
+            // Try paired UUID first; fall back to scan.
+            if let pairedID = pairedPeripheralID {
+                try? machine.transition(to: .scanning)
+                await runConnect(id: pairedID, fromState: .scanning)
+                if state.isReady { return }
+            } else {
+                startScanAndConnect()
+                try? await Task.sleep(for: .seconds(2))
+                if state.isReady { return }
+            }
+            attempt += 1
+        }
     }
 
     /// Drives MotionController and SensorController lifecycle as the session
