@@ -74,6 +74,35 @@ final class BLECentral: NSObject {
     var batteryPollTask: Task<Void, Never>?
     var batteryPolls: Int = 0
 
+    // Persisted pairing — saved after a successful runLooiInit, loaded on
+    // app launch. centralManagerDidUpdateState auto-reconnects to this Looi
+    // when BLE comes up so the user doesn't have to manually Scan + Connect
+    // on every app launch. Use forgetPairing() to clear.
+    private enum UserDefaultKeys {
+        static let pairedPeripheralID = "ulooi.last.paired.peripheral.id"
+    }
+
+    var pairedPeripheralID: UUID? {
+        get {
+            UserDefaults.standard.string(forKey: UserDefaultKeys.pairedPeripheralID)
+                .flatMap(UUID.init(uuidString:))
+        }
+        set {
+            if let new = newValue {
+                UserDefaults.standard.set(new.uuidString, forKey: UserDefaultKeys.pairedPeripheralID)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultKeys.pairedPeripheralID)
+            }
+        }
+    }
+
+    func forgetPairing() {
+        if let prior = pairedPeripheralID {
+            DevLog.event("forgetting paired Looi: \(prior.uuidString.prefix(8))", channel: DevLog.ble)
+        }
+        pairedPeripheralID = nil
+    }
+
     override init() {
         super.init()
         // queue=.main keeps delegate callbacks on the main actor (no thread hop).
@@ -270,6 +299,16 @@ final class BLECentral: NSObject {
         // missing piece (per re-read of waasd.py).
         startMotorHeartbeat()
         startBatteryPoll()
+
+        // Save pairing so next launch can auto-reconnect without manual Scan
+        // + Connect. Write only if changed to avoid UserDefaults churn.
+        if let p = connectedPeripheral, pairedPeripheralID != p.identifier {
+            pairedPeripheralID = p.identifier
+            DevLog.event(
+                "pairing saved: \(p.identifier.uuidString.prefix(8)) — will auto-reconnect on next app launch",
+                channel: DevLog.ble
+            )
+        }
     }
 
     /// Start the 30ms motor heartbeat that keeps Looi connected. Always writes

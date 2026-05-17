@@ -8,6 +8,21 @@ extension BLECentral: CBCentralManagerDelegate {
         Task { @MainActor in
             self.state = newState
             DevLog.event("BLE state → \(newState.rawValue)")
+
+            // Auto-reconnect to the last paired Looi when BLE comes up.
+            // Skip if already connected (avoids race if user manually
+            // connected before BLE state callback fires).
+            if newState == .poweredOn,
+               let savedID = self.pairedPeripheralID,
+               self.connectedPeripheral == nil {
+                DevLog.event(
+                    "auto-reconnect: attempting saved Looi \(savedID.uuidString.prefix(8))",
+                    channel: DevLog.ble
+                )
+                Task { @MainActor in
+                    await self.connectAndAutoInitLooi(savedID)
+                }
+            }
         }
     }
 
