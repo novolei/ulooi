@@ -113,7 +113,7 @@ Throughout this plan, treat these three as the canonical build/test triggers. Ru
   xcodebuild build \
     -project ulooi.xcodeproj \
     -scheme ulooi \
-    -destination 'platform=iOS Simulator,name=iPhone 16' \
+    -destination 'platform=iOS Simulator,name=iPhone 17' \
     -quiet 2>&1 | tail -20
   ```
   Expected on success: last line ends with `** BUILD SUCCEEDED **`. On failure, full errors print.
@@ -129,12 +129,12 @@ Throughout this plan, treat these three as the canonical build/test triggers. Ru
   xcodebuild test \
     -project ulooi.xcodeproj \
     -scheme LooiKit \
-    -destination 'platform=iOS Simulator,name=iPhone 16' \
+    -destination 'platform=iOS Simulator,name=iPhone 17' \
     2>&1 | tail -30
   ```
   Expected on success: `Test Suite 'All tests' passed`.
 
-If `xcodebuild` complains "iPhone 16 not available", run `xcrun simctl list devices available iPhone` and substitute the highest available iPhone simulator name.
+If `xcodebuild` complains "iPhone 17 not available", run `xcrun simctl list devices available iPhone` and substitute the highest available iPhone simulator name. **Do not use `-quiet` if the build silently fails** — `-quiet` can mask SDK / destination mismatches; drop it and re-run to see real errors.
 
 ---
 
@@ -170,7 +170,7 @@ Expected: `## plan/m1-pr1-looikit-package`, no tracking yet.
 xcodebuild build \
   -project ulooi.xcodeproj \
   -scheme ulooi \
-  -destination 'platform=iOS Simulator,name=iPhone 16' \
+  -destination 'platform=iOS Simulator,name=iPhone 17' \
   -quiet 2>&1 | tail -10
 ```
 
@@ -388,7 +388,7 @@ Expected: lists `ulooi` (and possibly `LooiKit` / `LooiKitTesting` / `LooiKitTes
 xcodebuild build \
   -project ulooi.xcodeproj \
   -scheme ulooi \
-  -destination 'platform=iOS Simulator,name=iPhone 16' \
+  -destination 'platform=iOS Simulator,name=iPhone 17' \
   -quiet 2>&1 | tail -10
 ```
 
@@ -604,7 +604,7 @@ Expected on success: `Test Suite 'All tests' passed`.
 xcodebuild build \
   -project ulooi.xcodeproj \
   -scheme ulooi \
-  -destination 'platform=iOS Simulator,name=iPhone 16' \
+  -destination 'platform=iOS Simulator,name=iPhone 17' \
   -quiet 2>&1 | tail -10
 ```
 
@@ -1342,7 +1342,7 @@ Expected: `Test Suite 'All tests' passed`.
 
 ```bash
 xcodebuild build -project ulooi.xcodeproj -scheme ulooi \
-  -destination 'platform=iOS Simulator,name=iPhone 16' -quiet 2>&1 | tail -10
+  -destination 'platform=iOS Simulator,name=iPhone 17' -quiet 2>&1 | tail -10
 ```
 
 Expected: `** BUILD SUCCEEDED **`.
@@ -2303,7 +2303,7 @@ Expected: `Test Suite 'All tests' passed`. The happy-path test is slow (~800ms) 
 
 ```bash
 xcodebuild build -project ulooi.xcodeproj -scheme ulooi \
-  -destination 'platform=iOS Simulator,name=iPhone 16' -quiet 2>&1 | tail -10
+  -destination 'platform=iOS Simulator,name=iPhone 17' -quiet 2>&1 | tail -10
 ```
 
 Expected: `** BUILD SUCCEEDED **`. App still uses inline BLECentral — LooiSession is unused so far.
@@ -2636,7 +2636,7 @@ Expected: `Test Suite 'All tests' passed`. The async-heartbeat tests are timing-
 
 ```bash
 xcodebuild build -project ulooi.xcodeproj -scheme ulooi \
-  -destination 'platform=iOS Simulator,name=iPhone 16' -quiet 2>&1 | tail -10
+  -destination 'platform=iOS Simulator,name=iPhone 17' -quiet 2>&1 | tail -10
 ```
 
 Expected: `** BUILD SUCCEEDED **`.
@@ -2846,7 +2846,7 @@ final class HeadLightControllerTests: XCTestCase {
 ```bash
 swift test --package-path Packages/LooiKit 2>&1 | tail -20
 xcodebuild build -project ulooi.xcodeproj -scheme ulooi \
-  -destination 'platform=iOS Simulator,name=iPhone 16' -quiet 2>&1 | tail -10
+  -destination 'platform=iOS Simulator,name=iPhone 17' -quiet 2>&1 | tail -10
 ```
 
 Expected: tests pass, app builds.
@@ -3204,7 +3204,7 @@ final class SensorControllerTests: XCTestCase {
 ```bash
 swift test --package-path Packages/LooiKit 2>&1 | tail -30
 xcodebuild build -project ulooi.xcodeproj -scheme ulooi \
-  -destination 'platform=iOS Simulator,name=iPhone 16' -quiet 2>&1 | tail -10
+  -destination 'platform=iOS Simulator,name=iPhone 17' -quiet 2>&1 | tail -10
 ```
 
 Expected: green tests, app builds. The cancel test sleeps 5 seconds — that's slow; if it pains CI, shrink `LooiProtocol.Timing.batteryPollInterval` to 1s in a separate test helper.
@@ -3464,7 +3464,7 @@ Modify `disconnect()` to cancel the reconnect loop:
 ```bash
 swift test --package-path Packages/LooiKit 2>&1 | tail -30
 xcodebuild build -project ulooi.xcodeproj -scheme ulooi \
-  -destination 'platform=iOS Simulator,name=iPhone 16' -quiet 2>&1 | tail -10
+  -destination 'platform=iOS Simulator,name=iPhone 17' -quiet 2>&1 | tail -10
 ```
 
 Expected: green tests, app builds. The runtime reconnect path is exercised by `LooiSessionTests` happy path; full backoff-timing assertions are deferred to integration tests in a future PR.
@@ -3590,7 +3590,7 @@ rmdir ulooi/LooiKit 2>/dev/null || true  # empty if Task 2 moved everything else
 
 ```bash
 xcodebuild build -project ulooi.xcodeproj -scheme ulooi \
-  -destination 'platform=iOS Simulator,name=iPhone 16' -quiet 2>&1 | tail -20
+  -destination 'platform=iOS Simulator,name=iPhone 17' -quiet 2>&1 | tail -20
 ```
 
 Expected: `** BUILD SUCCEEDED **`. If a DevTools file still references `BLECentral`, the compile error names it — fix and re-run.
@@ -3617,7 +3617,7 @@ swift test --package-path Packages/LooiKit 2>&1 | tail -10
 xcodebuild test \
   -project ulooi.xcodeproj \
   -scheme LooiKit \
-  -destination 'platform=iOS Simulator,name=iPhone 16' \
+  -destination 'platform=iOS Simulator,name=iPhone 17' \
   2>&1 | tail -20
 ```
 
