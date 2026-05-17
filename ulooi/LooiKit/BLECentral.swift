@@ -470,7 +470,7 @@ final class BLECentral: NSObject {
         heartbeatStartTime = Date()
         heartbeatTask = Task { @MainActor in
             DevLog.event(
-                "motor heartbeat: starting (FED0, 30ms target, STOP, .withResponse)",
+                "motor heartbeat: starting (FED0, 30ms target, .withoutResponse, current=\(self.currentMotion.label))",
                 channel: DevLog.ble
             )
             while !Task.isCancelled {

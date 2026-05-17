@@ -72,7 +72,10 @@ struct CommandView: View {
 
     private func applyMotion(_ preset: MotionPreset) {
         central.currentMotion = MotionState(label: preset.label, data: preset.bytes)
-        DevLog.event("motion → \(preset.label) (heartbeat sends each 30ms)", channel: DevLog.ui)
+        DevLog.event(
+            "motion → \(preset.label) (heartbeat will send: \(preset.bytes.hexEncoded) to FED0 every 30ms)",
+            channel: DevLog.ui
+        )
     }
 
     // MARK: - Presets
