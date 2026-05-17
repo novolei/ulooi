@@ -21,6 +21,17 @@ public final class LooiSession {
     public private(set) var state: SessionState = .disconnected
     public private(set) var currentPeripheral: DiscoveredPeripheral?
 
+    /// Latest cliff state — stubbed as `.grounded` here; Task 10 replaces this
+    /// with a live reference from `SensorController.cliffState` once the sensor
+    /// pipeline is wired. `MotionController.cliffStateProvider` reads this field.
+    public private(set) var cliffState: CliffState = .grounded
+
+    // MARK: - Controllers
+
+    /// Owns the FED0 30ms motor heartbeat and the cliff hard-block.
+    /// Constructed in `init`; lifecycle (start/stop) driven by session state.
+    public let motion: MotionController
+
     // MARK: - Private fields
 
     private let transport: BLETransport
@@ -42,14 +53,28 @@ public final class LooiSession {
         self.transport = transport
         self.machine = SessionStateMachine()
 
-        // Mirror machine.state into self.state so @Observable can react.
-        // The Task hop ensures the assignment always lands on @MainActor
-        // even if onTransition fires from a background continuation.
-        self.machine.onTransition = { [weak self] _, to in
+        // Two-step capture pattern: construct MotionController with a stub
+        // closure, then reassign that closure to read self.cliffState.
+        // This avoids referencing `self` before all stored properties are init'd.
+        var cliffProvider: () -> CliffState = { .grounded }
+        self.motion = MotionController(
+            transport: transport,
+            cliffStateProvider: { cliffProvider() }
+        )
+
+        // Mirror machine.state into self.state and drive the heartbeat lifecycle.
+        // The Task hop ensures both assignments land on @MainActor even if
+        // onTransition fires from a background continuation.
+        self.machine.onTransition = { [weak self] from, to in
             Task { @MainActor [weak self] in
                 self?.state = to
+                self?.handleStateTransition(from: from, to: to)
             }
         }
+
+        // Now that self is fully initialised, wire the cliff provider to
+        // read self.cliffState. Task 10 replaces this with SensorController.
+        cliffProvider = { [weak self] in self?.cliffState ?? .grounded }
 
         // Watch for transport-level disconnections and react appropriately.
         // Task.detached + explicit @MainActor ensures the for-await loop
@@ -67,6 +92,7 @@ public final class LooiSession {
         disconnectionWatcher?.cancel()
         scanTask?.cancel()
         connectTask?.cancel()
+        // heartbeatTask is owned by MotionController; its deinit cancels it.
     }
 
     // MARK: - Public API
@@ -182,5 +208,26 @@ public final class LooiSession {
         logger.info("disconnection (\(String(describing: reason), privacy: .public)) from \(self.state.description, privacy: .public)")
         try? machine.transition(to: .disconnected)
         currentPeripheral = nil
+    }
+
+    /// Drives MotionController lifecycle as the session state changes.
+    ///
+    /// - I2: `.ready` entry → `motion.startHeartbeat()`
+    /// - I4: `.ready` exit  → `motion.cancelHeartbeat()`
+    /// - I6: any `.ready` → non-`.ready` transition → `motion.emergencyStop()`
+    ///       (spawned as a Task so the state machine is not blocked on the BLE write)
+    private func handleStateTransition(from: SessionState, to: SessionState) {
+        switch (from.isReady, to.isReady) {
+        case (false, true):
+            // I2: entering .ready — start the motor heartbeat.
+            motion.startHeartbeat()
+        case (true, false):
+            // I4: leaving .ready — cancel the heartbeat immediately …
+            motion.cancelHeartbeat()
+            // I6: … then send one confirmed stop write so the robot halts.
+            Task { await motion.emergencyStop() }
+        default:
+            break
+        }
     }
 }
