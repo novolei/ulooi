@@ -32,6 +32,12 @@ public final class LooiSession {
     /// Constructed in `init`; lifecycle (start/stop) driven by session state.
     public let motion: MotionController
 
+    /// Controls head pitch via FED1.
+    public let head: HeadController
+
+    /// Controls headlight brightness via FED2.
+    public let light: LightController
+
     // MARK: - Private fields
 
     private let transport: BLETransport
@@ -61,6 +67,8 @@ public final class LooiSession {
             transport: transport,
             cliffStateProvider: { cliffProvider() }
         )
+        self.head = HeadController(transport: transport)
+        self.light = LightController(transport: transport)
 
         // Mirror machine.state into self.state and drive the heartbeat lifecycle.
         // The Task hop ensures both assignments land on @MainActor even if
