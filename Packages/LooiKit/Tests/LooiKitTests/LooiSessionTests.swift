@@ -59,4 +59,40 @@ final class LooiSessionTests: XCTestCase {
         try? await Task.sleep(for: .milliseconds(50))
         XCTAssertEqual(session.state, .disconnected)
     }
+
+    func test_connectWithPeripheral_setsCurrentPeripheralImmediately() async {
+        // Regression: the connect(to: UUID) path used to leave currentPeripheral
+        // nil, causing ConnectionBanner + CommandView (which check
+        // `currentPeripheral != nil`) to never show as connected. The
+        // `connect(_:)` overload sets it immediately on tap.
+        let mock = MockBLETransport()
+        let session = LooiSession(transport: mock)
+        let peripheral = DiscoveredPeripheral(
+            id: UUID(),
+            name: "LOOI-test",
+            rssi: -50,
+            advertisedServices: [],
+            manufacturerData: nil,
+            lastSeen: Date()
+        )
+        session.connect(peripheral)
+        // Set is synchronous; no wait needed.
+        XCTAssertEqual(session.currentPeripheral?.id, peripheral.id)
+        XCTAssertEqual(session.currentPeripheral?.name, "LOOI-test")
+    }
+
+    func test_connectByUUID_synthesisesCurrentPeripheralAfterReady() async {
+        // Regression: connect(to: UUID) has no DiscoveredPeripheral context;
+        // a placeholder gets synthesised at .ready so the UI updates.
+        let mock = MockBLETransport()
+        mock.stubRead(LooiProtocol.Char.deviceInfoManufacturer, returns: Data("LOOI".utf8))
+        let session = LooiSession(transport: mock)
+        let id = UUID()
+        session.connect(to: id)
+        // Wait for full pipeline → .ready (~400ms handshake + buffer).
+        try? await Task.sleep(for: .milliseconds(800))
+        XCTAssertEqual(session.state, .ready)
+        XCTAssertEqual(session.currentPeripheral?.id, id)
+        XCTAssertEqual(session.currentPeripheral?.name, "LOOI")  // synthesised placeholder
+    }
 }

@@ -149,11 +149,28 @@ public final class LooiSession {
     }
 
     /// Manually connect to a specific peripheral by UUID (e.g. from a
-    /// previously paired peripheral ID stored on device).
+    /// previously paired peripheral ID stored on device, on cold-start
+    /// auto-reconnect). No DiscoveredPeripheral context is available on
+    /// this path — `currentPeripheral` gets a minimal placeholder synthesised
+    /// from the UUID once handshake completes (see `runConnect`).
     public func connect(to id: UUID) {
         connectTask?.cancel()
         connectTask = Task { [weak self] in
             await self?.runConnect(id: id, fromState: nil)
+        }
+    }
+
+    /// Manually connect to a specific discovered peripheral. Sets
+    /// `currentPeripheral` immediately to the full struct so observers
+    /// (ConnectionBanner, CommandView enable-state, etc.) see rich peripheral
+    /// info as soon as connect intent is recorded — and keep it after
+    /// handshake. Prefer this over `connect(to: UUID)` when you have a
+    /// `DiscoveredPeripheral` in hand (e.g. from a `transport.scan(...)` row).
+    public func connect(_ peripheral: DiscoveredPeripheral) {
+        connectTask?.cancel()
+        currentPeripheral = peripheral
+        connectTask = Task { [weak self] in
+            await self?.runConnect(id: peripheral.id, fromState: nil)
         }
     }
 
@@ -252,6 +269,20 @@ public final class LooiSession {
         try? machine.transition(to: .ready)
         // Persist the paired peripheral so reconnect can target it directly.
         pairedPeripheralID = id
+        // If this connect was driven by `connect(to: UUID)` without a
+        // discovered-peripheral context, synthesise a minimal one so
+        // SwiftUI views observing `currentPeripheral != nil` (ConnectionBanner,
+        // CommandView enable-state) update on .ready.
+        if currentPeripheral == nil {
+            currentPeripheral = DiscoveredPeripheral(
+                id: id,
+                name: "LOOI",
+                rssi: 0,
+                advertisedServices: [],
+                manufacturerData: nil,
+                lastSeen: Date()
+            )
+        }
     }
 
     /// Called when the transport fires a disconnection event.

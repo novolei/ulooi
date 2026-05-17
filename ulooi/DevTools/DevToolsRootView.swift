@@ -1,3 +1,4 @@
+import LooiKit
 import SwiftUI
 
 struct DevToolsRootView: View {
@@ -47,6 +48,14 @@ struct DevToolsRootView: View {
         }
         .onAppear {
             DevLog.event("DevToolsRootView appeared — build=\(BuildInfo.label)", channel: DevLog.ui)
+        }
+        // Bridge LooiKit's OSLog-only state transitions into the in-app
+        // ProbeLog so the Logs tab actually shows them. LooiKit logs to
+        // os.Logger directly (no DevLog dep — see Task 2 design); without
+        // this bridge, state: handshaking → ready etc. only appear in
+        // Xcode console, not in the app's own log surface.
+        .onChange(of: session.state.description) { _, newDescription in
+            DevLog.event("session.state → \(newDescription)", channel: DevLog.ble)
         }
     }
 }

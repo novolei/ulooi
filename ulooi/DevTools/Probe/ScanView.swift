@@ -175,10 +175,14 @@ private struct DiscoveryRow: View {
                 // No separate "auto-init" step needed.
                 Button("⚡ Connect via LooiSession") {
                     DevLog.event(
-                        "ScanView: connect(to: \(discovery.id.uuidString.prefix(8))) tapped",
+                        "ScanView: connect(\(discovery.name) / \(discovery.id.uuidString.prefix(8))) tapped",
                         channel: DevLog.ui
                     )
-                    session.connect(to: discovery.id)
+                    // Use the peripheral overload so currentPeripheral is set
+                    // immediately on tap — ConnectionBanner becomes visible
+                    // straight away, and CommandView enables its buttons
+                    // (both observe currentPeripheral != nil).
+                    session.connect(discovery)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)

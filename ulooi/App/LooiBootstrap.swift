@@ -26,5 +26,37 @@ public final class LooiBootstrap {
         let cbt = CoreBluetoothTransport()
         self.transport = cbt
         self.session = LooiSession(transport: cbt)
+
+        // Cold-launch auto-reconnect: poll transport.radioState until BLE is
+        // powered on (typically <1s after CBCentralManager init); if a paired
+        // peripheral is on record from a prior successful session, kick off
+        // the connect pipeline. Matches M0.5's BLECentral.centralManagerDidUpdateState
+        // auto-reconnect behavior — without this, every app launch requires
+        // the user to manually Scan + Connect again.
+        Task { @MainActor [session = self.session, transport = cbt] in
+            for _ in 0..<30 {  // up to ~30s waiting for radio
+                let radio = await transport.radioState
+                if radio == .poweredOn {
+                    if let pairedID = session.pairedPeripheralID {
+                        DevLog.event(
+                            "auto-reconnect: BLE powered on, attempting paired \(pairedID.uuidString.prefix(8))",
+                            channel: DevLog.ble
+                        )
+                        session.connect(to: pairedID)
+                    } else {
+                        DevLog.event(
+                            "auto-reconnect: BLE powered on but no paired peripheral on record",
+                            channel: DevLog.ble
+                        )
+                    }
+                    return
+                }
+                try? await Task.sleep(for: .seconds(1))
+            }
+            DevLog.warn(
+                "auto-reconnect: BLE radio never reached poweredOn within 30s — giving up",
+                channel: DevLog.ble
+            )
+        }
     }
 }
