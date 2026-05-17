@@ -50,13 +50,23 @@ struct CommandView: View {
     /// type concrete and the compiler happy.
     @ViewBuilder
     private func motionButton(for preset: MotionPreset) -> some View {
+        // Disable motion controls when not connected — prevents the
+        // confusing case where the user taps Forward without a live
+        // connection (currentMotion mutates but no heartbeat is running
+        // to deliver it), and also blocks accidentally arming a non-STOP
+        // motion that would then auto-execute the moment an auto-reconnect
+        // completes the INIT handshake.
+        let connected = central.connectedPeripheral != nil
+
         if preset.label == "STOP" {
             Button(preset.label) { applyMotion(preset) }
                 .buttonStyle(.borderedProminent)
                 .tint(.red)
+                .disabled(!connected)
         } else {
             Button(preset.label) { applyMotion(preset) }
                 .buttonStyle(.bordered)
+                .disabled(!connected)
         }
     }
 

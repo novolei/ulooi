@@ -231,14 +231,38 @@ final class BLECentral: NSObject {
         // Poll for didConnect instead of fixed sleep. Auto-reconnect at app
         // launch can take 2-5s because the system is busy initializing other
         // subsystems. Manual user-triggered connects usually finish in <1s.
-        // Polling adapts to whichever scenario is in play.
-        let connected = await waitForConnection(timeout: .seconds(5))
-        guard connected else {
+        var connected = await waitForConnection(timeout: .seconds(5))
+
+        if !connected {
+            // Fall back: iOS may have a stale peripheral cache (Looi wasn't
+            // advertising when we cold-called connect, or the previous session
+            // didn't close cleanly). Spawn a brief scan to refresh the
+            // peripheral state, then retry connect with the freshly-discovered
+            // peripheral. Solves the "connect: ... but never reaches connected"
+            // path that auto-reconnect-at-launch can hit.
             DevLog.warn(
-                "connectAndAutoInitLooi: peripheral didn't reach .connected within 5s — aborting",
+                "connectAndAutoInitLooi: direct connect timed out — falling back to scan-then-connect",
                 channel: DevLog.ble
             )
-            return
+            let foundViaScan = await scanForPairedLooi(timeout: .seconds(15))
+            guard foundViaScan else {
+                DevLog.warn(
+                    "scan fallback: paired Looi did not advertise within 15s — aborting (use Scan tab to manually reconnect)",
+                    channel: DevLog.ble
+                )
+                return
+            }
+            // Connect again — this time iOS has a fresh peripheral reference
+            // from the scan, so connect() should succeed quickly.
+            connect(id)
+            connected = await waitForConnection(timeout: .seconds(5))
+            guard connected else {
+                DevLog.warn(
+                    "scan fallback: connect after rescan still timed out — aborting",
+                    channel: DevLog.ble
+                )
+                return
+            }
         }
 
         // Poll for service + characteristic discovery instead of fixed sleep.
@@ -272,6 +296,38 @@ final class BLECentral: NSObject {
                 return true
             }
             try? await Task.sleep(for: .milliseconds(100))
+        }
+        return false
+    }
+
+    /// Scan-fallback for the paired Looi when direct connect-by-UUID stalls.
+    /// Starts a regular scan (LOOI name filter still active by default) and
+    /// returns true as soon as our paired peripheral appears in discoveries.
+    /// Always stops the scan on exit. Used by connectAndAutoInitLooi when
+    /// the initial connect attempt times out.
+    private func scanForPairedLooi(timeout: Duration) async -> Bool {
+        guard let pairedID = pairedPeripheralID else { return false }
+        DevLog.event(
+            "scanForPairedLooi: brief scan for \(pairedID.uuidString.prefix(8)) (timeout: \(timeout.components.seconds)s)",
+            channel: DevLog.ble
+        )
+        let wasScanning = isScanning
+        if !wasScanning {
+            startScan()
+        }
+        defer {
+            if !wasScanning {
+                stopScan()
+            }
+        }
+        let start = ContinuousClock.now
+        while ContinuousClock.now - start < timeout {
+            if discoveries[pairedID] != nil {
+                let waited = (ContinuousClock.now - start).components.seconds
+                DevLog.event("scanForPairedLooi: found after \(waited)s", channel: DevLog.ble)
+                return true
+            }
+            try? await Task.sleep(for: .milliseconds(500))
         }
         return false
     }
