@@ -12,6 +12,7 @@ struct CommandView: View {
     var body: some View {
         NavigationStack {
             Form {
+                motionSection
                 presetSection
                 manualSection
             }
@@ -21,6 +22,27 @@ struct CommandView: View {
             if manualTargetID == nil, let first = writableCharacteristics.first {
                 manualTargetID = first.uuid
             }
+        }
+    }
+
+    // MARK: - Motion (heartbeat-aware)
+
+    private var motionSection: some View {
+        Section {
+            ForEach(MotionPreset.all) { preset in
+                Button(preset.label) {
+                    let new = MotionState(label: preset.label, data: preset.bytes)
+                    central.currentMotion = new
+                    DevLog.event("motion → \(preset.label) (heartbeat sends each 30ms)", channel: DevLog.ui)
+                }
+                .buttonStyle(preset.label == "STOP" ? .borderedProminent : .bordered)
+                .tint(preset.label == "STOP" ? .red : .accentColor)
+            }
+        } header: {
+            Text("Motion control (heartbeat-aware) — current: \(central.currentMotion.label)")
+        } footer: {
+            Text("Tapping a motion replaces the heartbeat payload — robot keeps moving until you tap STOP. Auto-resets to STOP on disconnect.")
+                .font(.caption2)
         }
     }
 

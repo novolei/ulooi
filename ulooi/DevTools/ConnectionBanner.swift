@@ -38,6 +38,15 @@ struct ConnectionBanner: View {
                                 .font(.caption2.monospacedDigit())
                                 .foregroundStyle(.secondary)
                         }
+                        // Current motion target — orange + bold when robot is
+                        // actively moving (anything except STOP) so the user
+                        // has an unmissable visual cue that the heartbeat is
+                        // pushing a non-idle command.
+                        let motionLabel = central.currentMotion.label
+                        let isMoving = motionLabel != "STOP"
+                        Text("→ \(motionLabel)")
+                            .font(.caption2.weight(isMoving ? .heavy : .regular))
+                            .foregroundStyle(isMoving ? .orange : .secondary)
                     }
                 }
 

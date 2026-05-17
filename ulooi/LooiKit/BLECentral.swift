@@ -103,6 +103,12 @@ final class BLECentral: NSObject {
         pairedPeripheralID = nil
     }
 
+    // Current motor command. Heartbeat reads this and writes it to FED0
+    // every 30ms. CommandView's Motion control section mutates this when
+    // user taps Forward / Spin / etc. Reset to .stop on any disconnect
+    // so reconnect doesn't auto-resume movement.
+    var currentMotion: MotionState = .stop
+
     override init() {
         super.init()
         // queue=.main keeps delegate callbacks on the main actor (no thread hop).
@@ -148,8 +154,18 @@ final class BLECentral: NSObject {
     func disconnect() {
         guard let p = connectedPeripheral else { return }
         DevLog.event("disconnect: \(p.identifier)")
+        // Cancel keep-alives FIRST so the heartbeat doesn't race the
+        // safety-STOP write below.
         cancelMotorHeartbeat()
         cancelBatteryPoll()
+        // Safety: explicit STOP write before disconnect. Ensures the last
+        // command Looi receives is "halt motors" — avoids the robot
+        // continuing to coast on a Forward command if the connection
+        // drops mid-motion.
+        if let chr = findCharacteristic(LooiProtocol.Char.movement) {
+            p.writeValue(LooiCommand.Movement.stop, for: chr, type: .withResponse)
+        }
+        currentMotion = .stop
         central.cancelPeripheralConnection(p)
     }
 
@@ -348,7 +364,11 @@ final class BLECentral: NSObject {
                 // .withResponse: each write blocks the queue until ack — slower
                 // but guaranteed-delivery. Looi can't claim "no commands" while
                 // we're getting acks.
-                peripheral.writeValue(LooiCommand.Movement.stop, for: movementChar, type: .withResponse)
+                //
+                // Reads currentMotion every tick so user input from the Motion
+                // control buttons takes effect on the very next heartbeat
+                // (≤30ms latency). Default value is .stop.
+                peripheral.writeValue(self.currentMotion.data, for: movementChar, type: .withResponse)
                 self.heartbeatTicks += 1
                 // Log every tick for first 10 (to see start-up timing) then
                 // every 25 (to confirm ongoing).

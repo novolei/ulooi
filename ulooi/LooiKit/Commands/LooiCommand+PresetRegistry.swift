@@ -25,27 +25,11 @@ extension LooiCommand {
             note: "Step 2. After this, motion / light commands should respond."
         ),
 
-        // 1. Movement
-        Preset(label: "STOP (movement = 0,0)",
-               source: "andrey-tut", status: .verified,
-               characteristic: LooiProtocol.Char.movement, bytes: Movement.stop,
-               note: "Always safe; resets motors. Send on app background / disconnect."),
-        Preset(label: "Forward max",
-               source: "andrey-tut", status: .verified,
-               characteristic: LooiProtocol.Char.movement, bytes: Movement.forwardMax,
-               note: "Heartbeat required: re-send within 30ms or motors disengage."),
-        Preset(label: "Backward max",
-               source: "andrey-tut", status: .verified,
-               characteristic: LooiProtocol.Char.movement, bytes: Movement.backwardMax,
-               note: nil),
-        Preset(label: "Spin left max",
-               source: "andrey-tut", status: .verified,
-               characteristic: LooiProtocol.Char.movement, bytes: Movement.spinLeftMax,
-               note: nil),
-        Preset(label: "Spin right max",
-               source: "andrey-tut", status: .verified,
-               characteristic: LooiProtocol.Char.movement, bytes: Movement.spinRightMax,
-               note: nil),
+        // Note: Movement presets were removed from this registry — they need
+        // to update BLECentral.currentMotion (so heartbeat continues to send
+        // them) rather than firing a single-shot write that gets immediately
+        // overwritten by the next heartbeat tick. Motion is now controlled
+        // via CommandView's "Motion control" section (uses MotionPreset.all).
 
         // 2. Head
         Preset(label: "Head — center (0x5A)",

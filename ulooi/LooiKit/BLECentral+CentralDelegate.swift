@@ -123,6 +123,11 @@ extension BLECentral: CBCentralManagerDelegate {
             DevLog.event("disconnected: \(pid) — \(msg)\(hbInfo) (battery polls: \(self.batteryPolls))")
             self.cancelMotorHeartbeat()  // stop the motor keep-alive loop
             self.cancelBatteryPoll()     // stop the battery poll keep-alive loop
+            // Safety: reset motion state. Without this, an auto-reconnect
+            // (triggered by saved pairing) would have the heartbeat resume
+            // writing whatever motion was last selected — e.g., Forward —
+            // and the robot would start moving without user intent.
+            self.currentMotion = .stop
             self.connectedPeripheral = nil
             self.discoveredServices.removeAll()
         }
