@@ -30,13 +30,7 @@ struct CommandView: View {
     private var motionSection: some View {
         Section {
             ForEach(MotionPreset.all) { preset in
-                Button(preset.label) {
-                    let new = MotionState(label: preset.label, data: preset.bytes)
-                    central.currentMotion = new
-                    DevLog.event("motion → \(preset.label) (heartbeat sends each 30ms)", channel: DevLog.ui)
-                }
-                .buttonStyle(preset.label == "STOP" ? .borderedProminent : .bordered)
-                .tint(preset.label == "STOP" ? .red : .accentColor)
+                motionButton(for: preset)
             }
         } header: {
             Text("Motion control (heartbeat-aware) — current: \(central.currentMotion.label)")
@@ -44,6 +38,31 @@ struct CommandView: View {
             Text("Tapping a motion replaces the heartbeat payload — robot keeps moving until you tap STOP. Auto-resets to STOP on disconnect.")
                 .font(.caption2)
         }
+    }
+
+    /// Extracted to its own helper because inlining `Button { ... }
+    /// .buttonStyle(cond ? .borderedProminent : .bordered)` triggers
+    /// `The compiler is unable to type-check this expression in reasonable
+    /// time`. The ternary returns two different concrete style types
+    /// (`BorderedProminentButtonStyle` vs `BorderedButtonStyle`) and the
+    /// type inference cascade through ViewBuilder blows up. Splitting the
+    /// branches with an explicit if/else and `@ViewBuilder` keeps each path's
+    /// type concrete and the compiler happy.
+    @ViewBuilder
+    private func motionButton(for preset: MotionPreset) -> some View {
+        if preset.label == "STOP" {
+            Button(preset.label) { applyMotion(preset) }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+        } else {
+            Button(preset.label) { applyMotion(preset) }
+                .buttonStyle(.bordered)
+        }
+    }
+
+    private func applyMotion(_ preset: MotionPreset) {
+        central.currentMotion = MotionState(label: preset.label, data: preset.bytes)
+        DevLog.event("motion → \(preset.label) (heartbeat sends each 30ms)", channel: DevLog.ui)
     }
 
     // MARK: - Presets
