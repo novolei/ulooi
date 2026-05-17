@@ -26,16 +26,23 @@ struct DevToolsRootView: View {
                 .tabItem { Label("Logs", systemImage: "doc.text") }
         }
         .overlay(alignment: .top) {
-            // Build watermark — verify Cmd+R deployed the right code. See BuildInfo.swift.
-            Text(BuildInfo.label)
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(.yellow.opacity(0.92))
-                .foregroundStyle(.black)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .padding(.top, 4)
-                .allowsHitTesting(false)
+            VStack(spacing: 4) {
+                // Build watermark — verify Cmd+R deployed the right code.
+                Text(BuildInfo.label)
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.yellow.opacity(0.92))
+                    .foregroundStyle(.black)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .padding(.top, 4)
+                    .allowsHitTesting(false)
+
+                // Connection state banner — visible only when connected.
+                // Always shows across all tabs so the user has a constant
+                // visual confirmation of the BLE session.
+                ConnectionBanner(central: central)
+            }
         }
         .onAppear {
             DevLog.event("DevToolsRootView appeared — build=\(BuildInfo.label)", channel: DevLog.ui)
