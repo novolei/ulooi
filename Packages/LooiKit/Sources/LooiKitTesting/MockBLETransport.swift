@@ -187,6 +187,21 @@ public final class MockBLETransport: BLETransport, @unchecked Sendable {
 
     public nonisolated func subscribe(to characteristic: CBUUID) async throws -> AsyncStream<Data> {
         let uuidStr = characteristic.uuidString
+        // Check for a queued failure matching this characteristic
+        let failure = lock.withLock { () -> Failure? in
+            if case let .characteristicMissing(queued) = _queuedFailures.first, queued == uuidStr {
+                return _queuedFailures.removeFirst()
+            }
+            return nil
+        }
+        if let failure {
+            switch failure {
+            case .characteristicMissing:
+                throw LooiError.characteristicMissing(uuidStr)
+            default:
+                break
+            }
+        }
         lock.withLock { _subscriptions.append(uuidStr) }
         return AsyncStream { [weak self] continuation in
             guard let self else { continuation.finish(); return }
