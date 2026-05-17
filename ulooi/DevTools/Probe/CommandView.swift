@@ -2,7 +2,7 @@ import CoreBluetooth
 import SwiftUI
 
 struct CommandView: View {
-    @Bindable var central: BLECentral
+    let central: BLECentral
     let log: ProbeLog
 
     @State private var hexInput: String = ""

@@ -2,7 +2,7 @@ import CoreBluetooth
 import SwiftUI
 
 struct SenseView: View {
-    @Bindable var central: BLECentral
+    let central: BLECentral
     let log: ProbeLog
 
     @State private var subscribedCharacteristicIDs: Set<CBUUID> = []

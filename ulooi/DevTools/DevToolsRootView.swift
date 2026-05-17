@@ -1,8 +1,12 @@
 import SwiftUI
 
 struct DevToolsRootView: View {
-    @State private var central = BLECentral.shared
-    @State private var log = ProbeLog.shared
+    // Shared singletons — use plain `let`, not `@State`. `@State` for `@Observable`
+    // is for view-CREATED instances; using it on a shared singleton can break the
+    // observation propagation through child views (root cause of M0.5 "Logs tab
+    // never updates" bug). Plain `let` correctly registers property reads in body.
+    let central = BLECentral.shared
+    let log = ProbeLog.shared
 
     var body: some View {
         TabView {

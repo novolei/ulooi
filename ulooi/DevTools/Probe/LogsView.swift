@@ -1,7 +1,10 @@
 import SwiftUI
 
 struct LogsView: View {
-    @Bindable var log: ProbeLog
+    // Plain `let` is sufficient — we only read `log.entries`, never need `$log.xxx`
+    // bindings. `@Bindable` is for two-way property bindings; using it here was
+    // unnecessary and may have contributed to broken observation propagation.
+    let log: ProbeLog
 
     @State private var filter: ProbeLog.Level?
     @State private var showShare: Bool = false

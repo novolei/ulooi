@@ -2,7 +2,7 @@ import CoreBluetooth
 import SwiftUI
 
 struct InspectView: View {
-    @Bindable var central: BLECentral
+    let central: BLECentral
     let log: ProbeLog
 
     var body: some View {

@@ -2,7 +2,9 @@ import CoreBluetooth
 import SwiftUI
 
 struct ScanView: View {
-    @Bindable var central: BLECentral
+    // Plain `let` — no `$central.xxx` binding usage; @Observable read-tracking
+    // via property access in body is sufficient.
+    let central: BLECentral
     let log: ProbeLog
 
     @State private var serviceFilterText: String = ""
