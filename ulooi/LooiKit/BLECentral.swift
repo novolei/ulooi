@@ -29,10 +29,17 @@ final class BLECentral: NSObject {
         var lastSeen: Date
     }
 
-    private(set) var state: State = .unknown
-    private(set) var discoveries: [UUID: Discovery] = [:]
-    private(set) var connectedPeripheral: CBPeripheral?
-    private(set) var discoveredServices: [CBService] = []
+    // These four are written by the BLE delegate extensions
+    // (BLECentral+CentralDelegate.swift / BLECentral+PeripheralDelegate.swift)
+    // as events arrive on the MainActor. Outside callers should treat them
+    // as read-only. We can't use `private(set)` because Swift's `private`
+    // is file-scoped and the delegate extensions live in sibling files.
+    var state: State = .unknown
+    var discoveries: [UUID: Discovery] = [:]
+    var connectedPeripheral: CBPeripheral?
+    var discoveredServices: [CBService] = []
+
+    // Only mutated in this file (startScan / stopScan).
     private(set) var isScanning: Bool = false
 
     // Visible to delegate extensions in the same module.
@@ -124,7 +131,10 @@ final class BLECentral: NSObject {
 
     // MARK: - State translation (used by central delegate)
 
-    static func translate(_ cb: CBManagerState) -> State {
+    /// `nonisolated` because it's pure value translation — no state access.
+    /// Lets `nonisolated` CB delegate methods call it directly without a
+    /// MainActor hop.
+    nonisolated static func translate(_ cb: CBManagerState) -> State {
         switch cb {
         case .unknown, .resetting: return .unknown
         case .unsupported:         return .unsupported
