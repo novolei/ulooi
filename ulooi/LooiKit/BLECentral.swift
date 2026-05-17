@@ -228,27 +228,72 @@ final class BLECentral: NSObject {
         DevLog.event("connectAndAutoInitLooi: starting for \(id.uuidString.prefix(8))", channel: DevLog.ble)
         connect(id)
 
-        // Wait for didConnect + auto-discoverServices to fire. iOS connect
-        // typically completes in 200-800ms but Round 1 of the user's first
-        // test showed 800ms was sometimes too tight — bumped to 1500ms.
-        try? await Task.sleep(for: .milliseconds(1500))
-
-        guard let p = connectedPeripheral, p.state == .connected else {
-            DevLog.warn("connectAndAutoInitLooi: not connected after 1500ms — aborting", channel: DevLog.ble)
+        // Poll for didConnect instead of fixed sleep. Auto-reconnect at app
+        // launch can take 2-5s because the system is busy initializing other
+        // subsystems. Manual user-triggered connects usually finish in <1s.
+        // Polling adapts to whichever scenario is in play.
+        let connected = await waitForConnection(timeout: .seconds(5))
+        guard connected else {
+            DevLog.warn(
+                "connectAndAutoInitLooi: peripheral didn't reach .connected within 5s — aborting",
+                channel: DevLog.ble
+            )
             return
         }
 
-        // Wait for full service + characteristic enumeration. iOS typically
-        // enumerates ~10 services × ~5 chars each in 1-2s.
-        try? await Task.sleep(for: .milliseconds(1500))
+        // Poll for service + characteristic discovery instead of fixed sleep.
+        // 4s is generous — typical iOS enumeration of ~10 services × ~5
+        // chars finishes in ~1-2s.
+        let discovered = await waitForServiceDiscovery(timeout: .seconds(4))
+        if !discovered {
+            DevLog.warn(
+                "connectAndAutoInitLooi: service discovery incomplete after 4s — proceeding anyway, runLooiInit may guard-fail",
+                channel: DevLog.ble
+            )
+        }
 
-        // Step 0 of andrey-tut's sequence (we previously skipped this):
-        // read the standard 2A29 (Manufacturer Name) char. Comment in
-        // waasd.py: "Wake up macOS Bluetooth cache". On iOS it may not be
-        // load-bearing but it's cheap and mirrors the working Python flow.
+        // Step 0 of andrey-tut's sequence: read 2A29 manufacturer (macOS
+        // cache wake-up; on iOS it's at worst a no-op).
         await readDeviceInfoManufacturer()
 
         await runLooiInit()
+    }
+
+    /// Poll `connectedPeripheral.state` until it becomes `.connected` or
+    /// the timeout expires. Returns true on success, false on timeout.
+    /// Replaces fixed `Task.sleep` waits that were timing out under app-
+    /// launch conditions.
+    private func waitForConnection(timeout: Duration) async -> Bool {
+        let start = ContinuousClock.now
+        while ContinuousClock.now - start < timeout {
+            if let p = connectedPeripheral, p.state == .connected {
+                let waited = (ContinuousClock.now - start).components.seconds
+                DevLog.event("waitForConnection: connected after \(waited)s", channel: DevLog.ble)
+                return true
+            }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        return false
+    }
+
+    /// Poll until service+characteristic discovery has populated at least
+    /// one service with characteristics. Heuristic — proxy for "GATT
+    /// enumeration complete enough to attempt INIT".
+    private func waitForServiceDiscovery(timeout: Duration) async -> Bool {
+        let start = ContinuousClock.now
+        while ContinuousClock.now - start < timeout {
+            if !discoveredServices.isEmpty,
+               discoveredServices.contains(where: { ($0.characteristics?.isEmpty == false) }) {
+                let waited = (ContinuousClock.now - start).components.seconds
+                DevLog.event(
+                    "waitForServiceDiscovery: ready after \(waited)s (\(discoveredServices.count) services)",
+                    channel: DevLog.ble
+                )
+                return true
+            }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        return false
     }
 
     /// Read the standard Device Info Service Manufacturer Name characteristic
