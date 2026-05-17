@@ -25,19 +25,34 @@ extension BLECentral: CBCentralManagerDelegate {
         let mfg = advertisementData[CBAdvertisementDataManufacturerDataKey] as? Data
         let rssiInt = RSSI.intValue
         Task { @MainActor in
-            let alreadyKnown = self.discoveries[id] != nil
+            let now = Date()
+            let existing = self.discoveries[id]
+            let isNew = existing == nil
+
+            // Throttle: with allowDuplicates=true, each peripheral fires 5-10
+            // didDiscover callbacks per second. Without throttling, every callback
+            // mutates `discoveries`, which triggers SwiftUI to re-render and
+            // re-sort the entire list — visually presents as "flashing and
+            // jittering". We allow updates only every 300ms per peripheral.
+            // RSSI updates lag by at most 300ms, which is fine for "find Looi" UX
+            // but keeps the list visually calm.
+            let throttleInterval: TimeInterval = 0.3
+            if !isNew, let last = existing?.lastSeen,
+               now.timeIntervalSince(last) < throttleInterval {
+                return
+            }
+
             self.discoveries[id] = Discovery(
                 id: id,
                 name: name,
                 rssi: rssiInt,
                 advertisedServices: services,
                 manufacturerData: mfg,
-                lastSeen: Date()
+                lastSeen: now
             )
             // First sighting of a peripheral — log via DevLog (Xcode console + ProbeLog).
-            // Subsequent ad packets from the same peripheral are silent to avoid spam
-            // (scan can fire 10+ packets/sec per device with allowDuplicates=true).
-            if !alreadyKnown {
+            // Subsequent throttled updates are silent.
+            if isNew {
                 let svcDesc = services.isEmpty ? "no-svc-adv" : services.map { $0.uuidString }.joined(separator: ",")
                 DevLog.event(
                     "didDiscover: name=\(name) id=\(id.uuidString.prefix(8)) rssi=\(rssiInt) services=[\(svcDesc)]",
