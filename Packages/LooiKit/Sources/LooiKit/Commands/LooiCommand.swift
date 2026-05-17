@@ -17,4 +17,4 @@ import Foundation
 /// in CommandView; it depends on all of the above.
 ///
 /// See `LooiProtocol.swift` for UUIDs, handshake values, timing constants.
-enum LooiCommand {}
+public enum LooiCommand {}

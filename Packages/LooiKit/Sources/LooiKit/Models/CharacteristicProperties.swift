@@ -2,19 +2,23 @@ import CoreBluetooth
 
 /// Strongly-typed view of `CBCharacteristic.properties`'s bitmask. Used by
 /// probe screens to display + filter on read/write/notify capabilities.
-struct CharacteristicProperties: OptionSet, CustomStringConvertible {
-    let rawValue: UInt
+public struct CharacteristicProperties: OptionSet, CustomStringConvertible {
+    public let rawValue: UInt
 
-    static let broadcast    = CharacteristicProperties(rawValue: 0x01)
-    static let read         = CharacteristicProperties(rawValue: 0x02)
-    static let writeNoResp  = CharacteristicProperties(rawValue: 0x04)
-    static let write        = CharacteristicProperties(rawValue: 0x08)
-    static let notify       = CharacteristicProperties(rawValue: 0x10)
-    static let indicate     = CharacteristicProperties(rawValue: 0x20)
-    static let signed       = CharacteristicProperties(rawValue: 0x40)
-    static let extended     = CharacteristicProperties(rawValue: 0x80)
+    public init(rawValue: UInt) {
+        self.rawValue = rawValue
+    }
 
-    var description: String {
+    public static let broadcast    = CharacteristicProperties(rawValue: 0x01)
+    public static let read         = CharacteristicProperties(rawValue: 0x02)
+    public static let writeNoResp  = CharacteristicProperties(rawValue: 0x04)
+    public static let write        = CharacteristicProperties(rawValue: 0x08)
+    public static let notify       = CharacteristicProperties(rawValue: 0x10)
+    public static let indicate     = CharacteristicProperties(rawValue: 0x20)
+    public static let signed       = CharacteristicProperties(rawValue: 0x40)
+    public static let extended     = CharacteristicProperties(rawValue: 0x80)
+
+    public var description: String {
         var parts: [String] = []
         if contains(.read)        { parts.append("read") }
         if contains(.write)       { parts.append("write") }

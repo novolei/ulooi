@@ -6,12 +6,12 @@ extension LooiCommand {
     /// ⚠️ Source: sooperchargeforbots only (not in andrey-tut).
     /// M0.5 probe must verify and try the full 0x01..0xFF range to discover
     /// whether there's a brightness gradient or RGB encoding.
-    enum Light {
-        static let off: Data = Data([0x00])
-        static let on: Data  = Data([0x03])
+    public enum Light {
+        public nonisolated static let off: Data = Data([0x00])
+        public nonisolated static let on: Data  = Data([0x03])
 
         /// Speculative — try other values during probe.
-        static func raw(_ value: UInt8) -> Data {
+        public nonisolated static func raw(_ value: UInt8) -> Data {
             Data([value])
         }
     }

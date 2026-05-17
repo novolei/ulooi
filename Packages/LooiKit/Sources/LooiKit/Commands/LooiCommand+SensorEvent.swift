@@ -5,7 +5,7 @@ extension LooiCommand {
     /// ❓ Wire format incomplete. The M0.5 SenseView records raw bytes;
     /// once the layout is known, fill in typed Touch / Motion / Battery cases
     /// and a `decode(_:)` here.
-    enum SensorEvent {
+    public enum SensorEvent {
         // Placeholder. Example fillout once probed:
         //
         // struct Touch {

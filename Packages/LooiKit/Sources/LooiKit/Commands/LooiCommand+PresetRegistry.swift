@@ -6,7 +6,7 @@ extension LooiCommand {
     /// Order matters: init handshake first (must be hit before anything else
     /// responds), then primitives by domain (movement → head → light), then
     /// experimental (Rich/FE00).
-    static let allPresets: [Preset] = [
+    public nonisolated static let allPresets: [Preset] = [
         // 0. Init handshake — must be hit in order before any other write responds
         Preset(
             label: "INIT 1/2 — handshake 0x01",

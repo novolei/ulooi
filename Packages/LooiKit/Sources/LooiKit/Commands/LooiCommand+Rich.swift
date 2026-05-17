@@ -6,9 +6,9 @@ extension LooiCommand {
     /// ⚠️ Source: sooperchargeforbots README. Opcode table incomplete —
     /// completing it would require sniffing the official app's BLE traffic.
     /// M0.5/M1/M2/M3 base experience does not need this (Layer 1 covers it).
-    enum Rich {
+    public enum Rich {
         /// Build a raw 17-byte rich command. Use ONLY when probing FE00.
-        static func raw(
+        public nonisolated static func raw(
             seq: UInt8,
             opcode: UInt8,
             subOp: UInt8 = 0,
@@ -34,7 +34,7 @@ extension LooiCommand {
 
         /// Reference example from sooperchargeforbots README, byte-for-byte:
         /// `00 07 00 FF 05 00 00 00 00 64 02 0A 96 02 14 00 02`
-        static let referenceExample: Data = Data([
+        public nonisolated static let referenceExample: Data = Data([
             0x00, 0x07, 0x00, 0xFF, 0x05,
             0x00, 0x00, 0x00, 0x00,
             0x64,
