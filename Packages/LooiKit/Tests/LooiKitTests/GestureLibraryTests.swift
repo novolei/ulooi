@@ -5,6 +5,17 @@ import LooiKitTesting
 
 @MainActor
 final class GestureLibraryTests: XCTestCase {
+    func test_gestureKind_publicContract() {
+        XCTAssertEqual(GestureKind.allCases, [.wave, .lookAtMe, .sleep])
+        XCTAssertEqual(GestureKind.wave.rawValue, "wave")
+        XCTAssertEqual(GestureKind.lookAtMe.rawValue, "lookAtMe")
+        XCTAssertEqual(GestureKind.sleep.rawValue, "sleep")
+
+        for kind in GestureKind.allCases {
+            XCTAssertEqual(kind.id, kind.rawValue)
+        }
+    }
+
     func test_sleep_stopsMotionDimsLightAndCentersHead() async throws {
         let mock = MockBLETransport()
         let motion = MotionController(transport: mock, cliffStateProvider: { .grounded })
@@ -27,14 +38,17 @@ final class GestureLibraryTests: XCTestCase {
 
     func test_lookAtMe_centersHeadAndSetsWarmLight() async throws {
         let mock = MockBLETransport()
+        let motion = MotionController(transport: mock, cliffStateProvider: { .grounded })
         let gestures = GestureLibrary(
-            motion: MotionController(transport: mock, cliffStateProvider: { .grounded }),
+            motion: motion,
             head: HeadController(transport: mock),
             light: LightController(transport: mock)
         )
 
+        try motion.forward()
         try await gestures.perform(.lookAtMe)
 
+        XCTAssertEqual(motion.currentMotion, .stop)
         let writes = mock.writes
         XCTAssertTrue(writes.contains {
             $0.characteristicUUID == LooiProtocol.Char.head.uuidString && $0.data == LooiCommand.Head.center
