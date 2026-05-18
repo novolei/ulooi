@@ -3,14 +3,11 @@ import OSLog
 
 /// Controls Looi's head pitch via FED1 (1-byte position commands).
 ///
-/// Three named positions: `lookUp` (0x00), `center` (0x5A), `lookDown` (0xB0).
+/// novolei/LOOI-Robot uses an in-memory `head_pos` starting at 0x5A, increments
+/// by 10 for head-up, decrements by 10 for head-down, and writes with
+/// `response=False`. This controller mirrors that contract.
 ///
-/// **M0.5 finding:** `0xFF` auto-springs back to center — the firmware treats it
-/// as a "nod" gesture rather than a hold-at-pitch command. `lookDown()` therefore
-/// uses a non-extreme down pitch; use `nodDown()` when the auto-return gesture is
-/// desired.
-///
-/// Writes use `.withResponse` so delivery is confirmed before the caller proceeds.
+/// Writes use `.withoutResponse` to match the working Python implementation.
 ///
 /// Swift 6: `@MainActor` by package default (`defaultIsolation(MainActor.self)`).
 @MainActor
@@ -18,6 +15,8 @@ public final class HeadController {
 
     private let transport: BLETransport
     private let logger = Logger(subsystem: "ai.if2.ulooi", category: "looikit.head")
+    private var currentPosition: UInt8 = 0x5A
+    private static let step = 10
 
     public init(transport: BLETransport) {
         self.transport = transport
@@ -25,27 +24,27 @@ public final class HeadController {
 
     // MARK: - Named positions
 
-    /// Tilt head up (0x00 → FED1). May auto-spring back per M0.5.
+    /// Tilt head up one step from the current tracked position.
     public func lookUp() async throws {
-        logger.debug("head: lookUp (0x00)")
-        try await transport.write(LooiCommand.Head.lookUp, to: LooiProtocol.Char.head, type: .withResponse)
+        let next = min(0xFF, Int(currentPosition) + Self.step)
+        try await setPosition(UInt8(next))
     }
 
-    /// Tilt head down with a non-extreme hold position (0xB0 → FED1).
+    /// Tilt head down one step from the current tracked position.
     public func lookDown() async throws {
-        logger.debug("head: lookDown hold (0xB0)")
-        try await transport.write(LooiCommand.Head.lookDown, to: LooiProtocol.Char.head, type: .withResponse)
+        let next = max(0x00, Int(currentPosition) - Self.step)
+        try await setPosition(UInt8(next))
     }
 
-    /// Dip down and auto-return to center (0xFF → FED1).
-    public func nodDown() async throws {
-        logger.debug("head: nodDown (0xFF) — auto-springs back per M0.5")
-        try await transport.write(LooiCommand.Head.nodDown, to: LooiProtocol.Char.head, type: .withResponse)
-    }
-
-    /// Return head to mechanical center (0x5A → FED1).
+    /// Return head to mechanical center (0x5A -> FED1).
     public func center() async throws {
-        logger.debug("head: center (0x5A)")
-        try await transport.write(LooiCommand.Head.center, to: LooiProtocol.Char.head, type: .withResponse)
+        try await setPosition(0x5A)
+    }
+
+    /// Set a raw FED1 pitch position and remember it for future step commands.
+    public func setPosition(_ position: UInt8) async throws {
+        currentPosition = position
+        logger.debug("head: set position 0x\(String(position, radix: 16, uppercase: true))")
+        try await transport.write(Data([position]), to: LooiProtocol.Char.head, type: .withoutResponse)
     }
 }

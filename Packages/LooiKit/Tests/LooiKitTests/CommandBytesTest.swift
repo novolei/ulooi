@@ -28,15 +28,16 @@ final class CommandBytesTest: XCTestCase {
     func test_head_center_is0x5A() {
         XCTAssertEqual(LooiCommand.Head.center, Data([0x5A]))
     }
-    func test_head_lookUp_is0x00() {
-        XCTAssertEqual(LooiCommand.Head.lookUp, Data([0x00]))
+    func test_head_lookUpStepsAboveCenter() {
+        XCTAssertEqual(LooiCommand.Head.lookUp, Data([0x64]))
     }
-    func test_head_lookDown_isHoldPosition() {
-        XCTAssertEqual(LooiCommand.Head.lookDown, Data([0xB0]))
+    func test_head_lookDownStepsBelowCenter() {
+        XCTAssertEqual(LooiCommand.Head.lookDown, Data([0x50]))
     }
 
-    func test_head_nodDown_is0xFFAutoReturn() {
-        XCTAssertEqual(LooiCommand.Head.nodDown, Data([0xFF]))
+    func test_head_rawClampsToByteRange() {
+        XCTAssertEqual(LooiCommand.Head.raw(-1), Data([0x00]))
+        XCTAssertEqual(LooiCommand.Head.raw(256), Data([0xFF]))
     }
 
     // MARK: - Light (FED2)
@@ -44,8 +45,8 @@ final class CommandBytesTest: XCTestCase {
         XCTAssertEqual(LooiCommand.Light.off, Data([0x00]))
     }
 
-    func test_light_fullAvoidsFirmwareMax0xFF() {
-        XCTAssertEqual(LooiCommand.Light.full, Data([0xFE]))
+    func test_light_fullUsesSignedPositiveMax0x7F() {
+        XCTAssertEqual(LooiCommand.Light.full, Data([0x7F]))
     }
 
     // MARK: - Handshake (FEDA)

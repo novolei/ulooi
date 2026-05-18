@@ -54,7 +54,7 @@ final class GestureLibraryTests: XCTestCase {
             $0.characteristicUUID == LooiProtocol.Char.head.uuidString && $0.data == LooiCommand.Head.center
         })
         XCTAssertTrue(writes.contains {
-            $0.characteristicUUID == LooiProtocol.Char.light.uuidString && $0.data.count == 1 && $0.data[0] >= 0x80
+            $0.characteristicUUID == LooiProtocol.Char.light.uuidString && $0.data.count == 1 && $0.data[0] >= 0x50
         })
     }
 
