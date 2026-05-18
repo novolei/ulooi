@@ -52,6 +52,7 @@ public final class SensorController {
 
     public private(set) var cliffState: CliffState = .grounded
     public private(set) var imu: IMUReading = .zero
+    public private(set) var lastMotionSampleRaw: Data? = nil
     public private(set) var batteryPercent: Int? = nil
     public private(set) var lastTouchEvent: TouchEvent? = nil
 
@@ -167,7 +168,7 @@ public final class SensorController {
 
     /// Handle FED9 (telemetry) packets. Packet format:
     ///   byte 0: type
-    ///   0x01 → cliff bitfield (byte 1)
+    ///   0x01 → cliff binary contact states (5 bytes) or legacy bitfield (byte 1)
     ///   0x02 → IMU 3× int16 LE (bytes 1-2, 3-4, 5-6)
     ///   0x09 → touch event raw (byte 1)
     ///   0x11 → boot status (log only)
@@ -177,20 +178,27 @@ public final class SensorController {
 
         switch type {
         case 0x01:
-            // Cliff state bitfield
-            guard data.count >= 2 else {
+            if data.count >= 5 {
+                var state: CliffState = .grounded
+                if data[1] == 0x00 { state.insert(.frontSuspended) }
+                if data[2] == 0x00 { state.insert(.rearSuspended) }
+                if data[3] == 0x00 { state.insert(.leftSuspended) }
+                if data[4] == 0x00 { state.insert(.rightSuspended) }
+                cliffState = state
+            } else if data.count >= 2 {
+                cliffState = CliffState(rawValue: data[1])
+            } else {
                 logger.warning("FED9 type 0x01: packet too short (\(data.count) bytes)")
-                return
             }
-            cliffState = CliffState(rawValue: data[1])
             logger.debug("FED9 0x01: cliffState=\(self.cliffState.rawValue, privacy: .public)")
 
         case 0x02:
-            // IMU: 3× signed int16 little-endian at offsets 1, 3, 5
+            lastMotionSampleRaw = data
             guard data.count >= 7 else {
-                logger.warning("FED9 type 0x02: packet too short (\(data.count) bytes)")
+                logger.debug("FED9 type 0x02: retained short motion sample len=\(data.count, privacy: .public)")
                 return
             }
+            // IMU: 3× signed int16 little-endian at offsets 1, 3, 5
             let x = data.readInt16LE(at: 1)
             let y = data.readInt16LE(at: 3)
             let z = data.readInt16LE(at: 5)

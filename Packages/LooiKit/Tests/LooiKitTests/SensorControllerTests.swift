@@ -171,4 +171,59 @@ final class SensorControllerTests: XCTestCase {
         XCTAssertEqual(ctl.batteryPollCount, countAfterStart,
                        "battery poll count must not grow after cancelBatteryPoll")
     }
+
+    func test_m05BinarySensorGroundedAndFrontLiftedSamples_driveCliffState() async throws {
+        let mock = MockBLETransport()
+        let ctl = SensorController(transport: mock)
+
+        let (sensorsStream, _) = AsyncStream<Data>.makeStream()
+        let (telemetryStream, telemetryCont) = AsyncStream<Data>.makeStream()
+        ctl.consume(sensors: sensorsStream, telemetry: telemetryStream)
+
+        telemetryCont.yield(FED9Samples.binarySensorsGrounded)
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(ctl.cliffState, .grounded)
+
+        telemetryCont.yield(FED9Samples.binarySensorsFrontLifted)
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(ctl.cliffState, .frontSuspended)
+
+        telemetryCont.finish()
+    }
+
+    func test_m05ThreeByteIMUSample_isRetainedWithoutErasingLast3AxisIMU() async throws {
+        let mock = MockBLETransport()
+        let ctl = SensorController(transport: mock)
+
+        let (sensorsStream, _) = AsyncStream<Data>.makeStream()
+        let (telemetryStream, telemetryCont) = AsyncStream<Data>.makeStream()
+        ctl.consume(sensors: sensorsStream, telemetry: telemetryStream)
+
+        telemetryCont.yield(FED9Samples.legacyIMU3Axis)
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(ctl.imu.x, 1)
+        XCTAssertEqual(ctl.imu.y, -1)
+        XCTAssertEqual(ctl.imu.z, 256)
+
+        telemetryCont.yield(FED9Samples.imuLikeSample)
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(ctl.lastMotionSampleRaw, FED9Samples.imuLikeSample)
+        XCTAssertEqual(ctl.imu.x, 1)
+        XCTAssertEqual(ctl.imu.y, -1)
+        XCTAssertEqual(ctl.imu.z, 256)
+
+        telemetryCont.finish()
+    }
+
+    func test_batteryPoll_readsFirstByteFromTwoByteFED8BatteryPacket() async throws {
+        let mock = MockBLETransport()
+        let ctl = SensorController(transport: mock)
+        mock.stubRead(LooiProtocol.Char.battery, returns: Data([0x35, 0x00]))
+
+        ctl.startBatteryPoll()
+        try await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertEqual(ctl.batteryPercent, 53)
+        ctl.cancelBatteryPoll()
+    }
 }
