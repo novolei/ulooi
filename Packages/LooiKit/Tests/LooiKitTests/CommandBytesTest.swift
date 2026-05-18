@@ -31,13 +31,21 @@ final class CommandBytesTest: XCTestCase {
     func test_head_lookUp_is0x00() {
         XCTAssertEqual(LooiCommand.Head.lookUp, Data([0x00]))
     }
-    func test_head_lookDown_is0xFF() {
-        XCTAssertEqual(LooiCommand.Head.lookDown, Data([0xFF]))
+    func test_head_lookDown_isHoldPosition() {
+        XCTAssertEqual(LooiCommand.Head.lookDown, Data([0xB0]))
+    }
+
+    func test_head_nodDown_is0xFFAutoReturn() {
+        XCTAssertEqual(LooiCommand.Head.nodDown, Data([0xFF]))
     }
 
     // MARK: - Light (FED2)
     func test_light_off_is0x00() {
         XCTAssertEqual(LooiCommand.Light.off, Data([0x00]))
+    }
+
+    func test_light_fullAvoidsFirmwareMax0xFF() {
+        XCTAssertEqual(LooiCommand.Light.full, Data([0xFE]))
     }
 
     // MARK: - Handshake (FEDA)

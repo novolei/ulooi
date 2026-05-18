@@ -16,10 +16,17 @@ final class HeadLightControllerTests: XCTestCase {
         XCTAssertEqual(mock.writes.first?.data, Data([0x00]))
     }
 
-    func test_lookDown_writes0xFFToFED1() async throws {
+    func test_lookDown_writesHoldPositionToFED1() async throws {
         let mock = MockBLETransport()
         let h = HeadController(transport: mock)
         try await h.lookDown()
+        XCTAssertEqual(mock.writes.first?.data, Data([0xB0]))
+    }
+
+    func test_nodDown_writes0xFFAutoReturnToFED1() async throws {
+        let mock = MockBLETransport()
+        let h = HeadController(transport: mock)
+        try await h.nodDown()
         XCTAssertEqual(mock.writes.first?.data, Data([0xFF]))
     }
 
@@ -32,12 +39,12 @@ final class HeadLightControllerTests: XCTestCase {
 
     // MARK: - Light
 
-    func test_lightFull_writes0xFFToFED2() async throws {
+    func test_lightFull_writes0xFEToFED2() async throws {
         let mock = MockBLETransport()
         let l = LightController(transport: mock)
         try await l.set(brightness: 1.0)
         XCTAssertEqual(mock.writes.first?.characteristicUUID, LooiProtocol.Char.light.uuidString)
-        XCTAssertEqual(mock.writes.first?.data, Data([0xFF]))
+        XCTAssertEqual(mock.writes.first?.data, Data([0xFE]))
     }
 
     func test_lightHalf_writesApprox128ToFED2() async throws {
@@ -60,6 +67,6 @@ final class HeadLightControllerTests: XCTestCase {
         let mock = MockBLETransport()
         let l = LightController(transport: mock)
         try await l.set(brightness: 5.0)
-        XCTAssertEqual(mock.writes.first?.data, Data([0xFF]))
+        XCTAssertEqual(mock.writes.first?.data, Data([0xFE]))
     }
 }

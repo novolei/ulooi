@@ -3,7 +3,7 @@ import Foundation
 extension LooiCommand {
     /// FED1 — head PITCH (up/down tilt). NOT yaw — head left/right turning is
     /// done via FED0 wheel spin (rotate the whole body).
-    /// Wire: 1 byte position, 0x00…0xFF. Center: 0x5A.
+    /// Wire: 1 byte position, 0x00...0xFF. Center: 0x5A.
     /// ✅ Source: andrey-tut + M0.5 hardware probe (corrected from initial
     /// mis-labeling as left/right).
     public enum Head {
@@ -11,11 +11,11 @@ extension LooiCommand {
         public nonisolated static let center: Data   = Data([0x5A])
         /// Head looks up (tilts back).
         public nonisolated static let lookUp: Data   = Data([0x00])
-        /// Head looks down (tilts forward). NOTE: empirically observed to
-        /// auto-spring back to center after firing — Looi firmware may
-        /// interpret 0xFF as a "nod down" gesture rather than a hold-at-pitch
-        /// command. Symmetric behavior at 0x00 not yet verified.
-        public nonisolated static let lookDown: Data = Data([0xFF])
+        /// Head looks down with a non-extreme pitch value intended to hold.
+        /// `0xFF` is reserved for the firmware's down-nod auto-return behavior.
+        public nonisolated static let lookDown: Data = Data([0xB0])
+        /// Head dips down and auto-returns to center on real hardware.
+        public nonisolated static let nodDown: Data = Data([0xFF])
 
         /// Raw 1-byte position command. Clamps to [0, 255].
         public nonisolated static func raw(_ pitch: Int) -> Data {

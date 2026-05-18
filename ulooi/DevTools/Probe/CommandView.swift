@@ -78,7 +78,14 @@ struct CommandView: View {
                 Spacer()
                 Button("Look Down") {
                     Task { try? await session.head.lookDown() }
-                    DevLog.event("head: lookDown", channel: DevLog.ui)
+                    DevLog.event("head: lookDown hold (0xB0)", channel: DevLog.ui)
+                }
+                .buttonStyle(.bordered)
+                .disabled(!connected)
+                Spacer()
+                Button("Nod") {
+                    Task { try? await session.head.nodDown() }
+                    DevLog.event("head: nodDown auto-return (0xFF)", channel: DevLog.ui)
                 }
                 .buttonStyle(.bordered)
                 .disabled(!connected)
@@ -103,7 +110,7 @@ struct CommandView: View {
             HStack {
                 Button("Full") {
                     Task { try? await session.light.set(brightness: 1.0) }
-                    DevLog.event("light: full (1.0)", channel: DevLog.ui)
+                    DevLog.event("light: full (1.0 → 0xFE)", channel: DevLog.ui)
                 }
                 .buttonStyle(.bordered)
                 .disabled(!connected)
