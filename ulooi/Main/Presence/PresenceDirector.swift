@@ -10,6 +10,7 @@ final class PresenceDirector {
     private static let bodyNotConnectedLine = "Looi 的小身体还没连上。"
 
     @ObservationIgnored private var gestureTask: Task<Void, Never>?
+    @ObservationIgnored private var gestureGeneration = 0
 
     private(set) var activeGesture: GestureKind?
     private(set) var isSleeping = false
@@ -55,6 +56,7 @@ final class PresenceDirector {
             return
         }
 
+        gestureGeneration += 1
         gestureTask?.cancel()
         gestureTask = nil
         session.motion.stop()
@@ -75,26 +77,32 @@ final class PresenceDirector {
             return
         }
 
+        gestureGeneration += 1
+        let generation = gestureGeneration
         activeGesture = kind
         lastErrorLine = nil
 
         gestureTask = Task { @MainActor in
-            defer {
-                activeGesture = nil
-                gestureTask = nil
-            }
+            guard generation == gestureGeneration else { return }
 
-            activeGesture = kind
-            lastErrorLine = nil
+            defer {
+                if generation == gestureGeneration {
+                    activeGesture = nil
+                    gestureTask = nil
+                }
+            }
 
             do {
                 try await gestures.perform(kind)
+                guard generation == gestureGeneration else { return }
                 isSleeping = (kind == .sleep)
             } catch is CancellationError {
                 return
             } catch LooiError.cliffLocked {
+                guard generation == gestureGeneration else { return }
                 lastErrorLine = "脚下需要支撑，先不乱动。"
             } catch {
+                guard generation == gestureGeneration else { return }
                 lastErrorLine = "刚刚没配合好，我缓一下。"
             }
         }
