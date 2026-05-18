@@ -36,3 +36,6 @@ fastlane/test_output
 .idea/
 .vscode/
 *.swp
+
+# Local agent workspaces
+.superpowers/
