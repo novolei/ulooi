@@ -9,20 +9,22 @@ struct EmbodiedHomeView: View {
         GeometryReader { proxy in
             let metrics = FaceModeMetrics(size: proxy.size, safeAreaInsets: proxy.safeAreaInsets)
 
-            ZStack {
-                TimelineView(.periodic(from: .now, by: 0.25)) { _ in
-                    GeometricFaceView(model: director.face)
-                        .ignoresSafeArea()
-                }
+            TimelineView(.periodic(from: .now, by: 0.25)) { _ in
+                let face = director.face
 
-                VStack(spacing: 0) {
-                    topBar(metrics: metrics)
-                    Spacer(minLength: metrics.middleGap)
-                    bottomControls(metrics: metrics)
+                ZStack {
+                    GeometricFaceView(model: face)
+                        .ignoresSafeArea()
+
+                    VStack(spacing: 0) {
+                        topBar(metrics: metrics)
+                        Spacer(minLength: metrics.middleGap)
+                        bottomControls(face: face, metrics: metrics)
+                    }
+                    .padding(.horizontal, metrics.horizontalPadding)
+                    .padding(.top, metrics.topPadding)
+                    .padding(.bottom, metrics.bottomPadding)
                 }
-                .padding(.horizontal, metrics.horizontalPadding)
-                .padding(.top, metrics.topPadding)
-                .padding(.bottom, metrics.bottomPadding)
             }
         }
         .foregroundStyle(.white)
@@ -47,9 +49,9 @@ struct EmbodiedHomeView: View {
         }
     }
 
-    private func bottomControls(metrics: FaceModeMetrics) -> some View {
+    private func bottomControls(face: FaceModel, metrics: FaceModeMetrics) -> some View {
         VStack(spacing: metrics.controlSpacing) {
-            Text(director.face.line)
+            Text(face.line)
                 .font(.system(size: metrics.lineFontSize, weight: .medium, design: .rounded))
                 .foregroundStyle(.white.opacity(0.86))
                 .lineLimit(2)
@@ -204,7 +206,7 @@ private struct FaceModeMetrics {
 
     var buttonWidth: CGFloat {
         let available = max(0, size.width - horizontalPadding * 2 - buttonSpacing * 2)
-        return min(isCompactHeight ? 94 : 104, max(82, floor(available / 3)))
+        return min(isCompactHeight ? 94 : 104, max(72, floor(available / 3)))
     }
 
     var buttonHeight: CGFloat {
