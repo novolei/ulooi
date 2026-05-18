@@ -28,11 +28,11 @@ final class CommandBytesTest: XCTestCase {
     func test_head_center_is0x5A() {
         XCTAssertEqual(LooiCommand.Head.center, Data([0x5A]))
     }
-    func test_head_lookUpStepsAboveCenter() {
-        XCTAssertEqual(LooiCommand.Head.lookUp, Data([0x64]))
+    func test_head_lookUpStepsBelowCenter() {
+        XCTAssertEqual(LooiCommand.Head.lookUp, Data([0x3A]))
     }
-    func test_head_lookDownStepsBelowCenter() {
-        XCTAssertEqual(LooiCommand.Head.lookDown, Data([0x50]))
+    func test_head_lookDownStepsAboveCenter() {
+        XCTAssertEqual(LooiCommand.Head.lookDown, Data([0x7A]))
     }
 
     func test_head_rawClampsToByteRange() {

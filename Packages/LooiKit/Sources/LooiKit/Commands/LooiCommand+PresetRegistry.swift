@@ -35,14 +35,14 @@ extension LooiCommand {
         Preset(label: "Head — center (0x5A)",
                source: "andrey-tut", status: .verified,
                characteristic: LooiProtocol.Char.head, bytes: Head.center, note: nil),
-        Preset(label: "Head — look up step (0x64 from center)",
+        Preset(label: "Head — look up step (0x3A from center)",
                source: "andrey-tut+M0.5", status: .verified,
                characteristic: LooiProtocol.Char.head, bytes: Head.lookUp,
-               note: "novolei increments head_pos from 0x5A for head up. Yaw/turning is via FED0 wheel spin."),
-        Preset(label: "Head — look down step (0x50 from center)",
+               note: "Real-device DevTools correction: label-wise up uses a smaller pitch byte. Yaw/turning is via FED0 wheel spin."),
+        Preset(label: "Head — look down step (0x7A from center)",
                source: "andrey-tut+M0.5", status: .verified,
                characteristic: LooiProtocol.Char.head, bytes: Head.lookDown,
-               note: "novolei decrements head_pos from 0x5A for head down."),
+               note: "Real-device DevTools correction: label-wise down uses a larger pitch byte and a 0x20 step."),
 
         // 3. Light
         Preset(label: "Light — full (0x7F)",

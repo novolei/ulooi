@@ -3,9 +3,10 @@ import OSLog
 
 /// Controls Looi's head pitch via FED1 (1-byte position commands).
 ///
-/// novolei/LOOI-Robot uses an in-memory `head_pos` starting at 0x5A, increments
-/// by 10 for head-up, decrements by 10 for head-down, and writes with
-/// `response=False`. This controller mirrors that contract.
+/// novolei/LOOI-Robot uses an in-memory `head_pos` starting at 0x5A and writes
+/// with `response=False`. Real-device M1.2 testing showed our DevTools labels
+/// need the inverse direction of novolei's keyboard labels, and that 0x0A steps
+/// were too small to reach the useful lower pitch range quickly.
 ///
 /// Writes use `.withoutResponse` to match the working Python implementation.
 ///
@@ -16,7 +17,7 @@ public final class HeadController {
     private let transport: BLETransport
     private let logger = Logger(subsystem: "ai.if2.ulooi", category: "looikit.head")
     private var currentPosition: UInt8 = 0x5A
-    private static let step = 10
+    private static let step = 0x20
 
     public init(transport: BLETransport) {
         self.transport = transport
@@ -24,15 +25,15 @@ public final class HeadController {
 
     // MARK: - Named positions
 
-    /// Tilt head up one step from the current tracked position.
+    /// Tilt head up one large step from the current tracked position.
     public func lookUp() async throws {
-        let next = min(0xFF, Int(currentPosition) + Self.step)
+        let next = max(0x00, Int(currentPosition) - Self.step)
         try await setPosition(UInt8(next))
     }
 
-    /// Tilt head down one step from the current tracked position.
+    /// Tilt head down one large step from the current tracked position.
     public func lookDown() async throws {
-        let next = max(0x00, Int(currentPosition) - Self.step)
+        let next = min(0xFF, Int(currentPosition) + Self.step)
         try await setPosition(UInt8(next))
     }
 

@@ -78,7 +78,7 @@ struct CommandView: View {
                 Spacer()
                 Button("Look Down") {
                     Task { try? await session.head.lookDown() }
-                    DevLog.event("head: lookDown step (-10 from current)", channel: DevLog.ui)
+                    DevLog.event("head: lookDown step (+0x20 from current)", channel: DevLog.ui)
                 }
                 .buttonStyle(.bordered)
                 .disabled(!connected)

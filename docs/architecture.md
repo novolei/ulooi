@@ -16,7 +16,7 @@
 
 - `Packages/LooiKit` Swift Package：`LooiSession`、`BLETransport`、`CoreBluetoothTransport`、`MockBLETransport`、`HandshakeRunner`、`SessionStateMachine`、`ReconnectPolicy`、Motion/Head/Light/Sensor controllers、typed command bytes、LooiKit unit tests。
 - `ulooi` app target：`ContentView` 仍然进入 DevTools；`LooiBootstrap` 创建共享 `CoreBluetoothTransport + LooiSession` 并做 cold-launch auto-reconnect；DevTools tabs 已经通过 LooiSession/controllers 操作硬件。
-- M0.5 真机结论已进入实现：FEDA handshake、FED0 30ms `.withoutResponse` heartbeat、FED1 pitch、FED2 brightness、FED8 4s battery poll、FED9 telemetry subscription。M1.2 DevTools 真机修正：FED1 按 novolei/LOOI-Robot 从中心 `0x5A` 以 `0x0A` 步进，写入使用 `.withoutResponse`；FED2 app-level full 使用 signed positive max `0x7F`，避开不可靠的 `0x80...0xFF`。
+- M0.5 真机结论已进入实现：FEDA handshake、FED0 30ms `.withoutResponse` heartbeat、FED1 pitch、FED2 brightness、FED8 4s battery poll、FED9 telemetry subscription。M1.2 DevTools 真机修正：FED1 从中心 `0x5A` 追踪 pitch，写入使用 `.withoutResponse`；DevTools label-wise Look Up 向更小 byte 步进，Look Down 向更大 byte 步进，步进 `0x20`；FED2 app-level full 使用 signed positive max `0x7F`，避开不可靠的 `0x80...0xFF`。
 
 未实现：
 

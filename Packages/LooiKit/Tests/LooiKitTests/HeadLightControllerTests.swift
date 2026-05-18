@@ -8,29 +8,30 @@ final class HeadLightControllerTests: XCTestCase {
 
     // MARK: - Head
 
-    func test_lookUp_writesOneStepAboveCenterWithoutResponse() async throws {
+    func test_lookUp_writesOneLargeStepBelowCenterWithoutResponse() async throws {
         let mock = MockBLETransport()
         let h = HeadController(transport: mock)
         try await h.lookUp()
         XCTAssertEqual(mock.writes.first?.characteristicUUID, LooiProtocol.Char.head.uuidString)
-        XCTAssertEqual(mock.writes.first?.data, Data([0x64]))
+        XCTAssertEqual(mock.writes.first?.data, Data([0x3A]))
         XCTAssertEqual(mock.writes.first?.type, .withoutResponse)
     }
 
-    func test_lookDown_writesOneStepBelowCenterWithoutResponse() async throws {
+    func test_lookDown_writesOneLargeStepAboveCenterWithoutResponse() async throws {
         let mock = MockBLETransport()
         let h = HeadController(transport: mock)
         try await h.lookDown()
-        XCTAssertEqual(mock.writes.first?.data, Data([0x50]))
+        XCTAssertEqual(mock.writes.first?.data, Data([0x7A]))
         XCTAssertEqual(mock.writes.first?.type, .withoutResponse)
     }
 
-    func test_repeatedLookDownStepsTowardLowerBytes() async throws {
+    func test_repeatedLookDownStepsTowardBottomRange() async throws {
         let mock = MockBLETransport()
         let h = HeadController(transport: mock)
         try await h.lookDown()
         try await h.lookDown()
-        XCTAssertEqual(mock.writes.map(\.data), [Data([0x50]), Data([0x46])])
+        try await h.lookDown()
+        XCTAssertEqual(mock.writes.map(\.data), [Data([0x7A]), Data([0x9A]), Data([0xBA])])
     }
 
     func test_center_writes0x5AToFED1() async throws {

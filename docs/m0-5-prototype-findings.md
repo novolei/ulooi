@@ -94,8 +94,8 @@ App 启动 → BLE state → poweredOn → **auto-reconnect 自动触发**（基
 | 命令 | bytes | 实测 |
 |---|---|---|
 | center | `5A` | ✅ 头回中 |
-| look up step | `64` from center | ✅/⚠️ novolei/LOOI-Robot 从 `5A` 每次 `+0A` |
-| look down step | `50` from center | ✅/⚠️ novolei/LOOI-Robot 从 `5A` 每次 `-0A` |
+| look up step | `3A` from center | ✅ Ryan 2026-05-19 真机反馈：DevTools label-wise up uses smaller pitch byte |
+| look down step | `7A` / `9A` / `BA`... | ✅ Ryan 2026-05-19 真机反馈：DevTools label-wise down uses larger pitch byte；`0A` 步进太小，改 `20` |
 | extrema | `00` / `FF` | ⚠️ 极限值不应用作 DevTools 普通按钮；真实体验可能触发机械回弹或固件保护 |
 
 单次写即可，**不需要 heartbeat**。
