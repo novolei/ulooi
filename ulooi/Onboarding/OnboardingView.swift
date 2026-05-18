@@ -3,7 +3,6 @@ import SwiftUI
 
 struct OnboardingView: View {
     let session: LooiSession
-    let complete: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
@@ -54,5 +53,5 @@ struct OnboardingView: View {
 }
 
 #Preview {
-    OnboardingView(session: LooiBootstrap.shared.session, complete: {})
+    OnboardingView(session: LooiBootstrap.shared.session)
 }

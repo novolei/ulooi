@@ -6,7 +6,6 @@ struct ContentView: View {
     @State private var mode = ModeController()
     @State private var director = PresenceDirector(session: LooiBootstrap.shared.session)
     @State private var showingSettings = false
-    @State private var onboardingWasVisible = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -15,12 +14,7 @@ struct ContentView: View {
             Group {
                 switch mode.surface(session: session, orientation: orientation) {
                 case .onboarding:
-                    OnboardingView(session: session) {
-                        mode.completeOnboarding()
-                    }
-                    .onAppear {
-                        onboardingWasVisible = true
-                    }
+                    OnboardingView(session: session)
                 case .faceMode:
                     EmbodiedHomeView(director: director) {
                         showingSettings = true
@@ -69,7 +63,7 @@ struct ContentView: View {
     }
 
     private func completeOnboardingIfReady(_ state: SessionState) {
-        guard onboardingWasVisible, !mode.onboardingComplete, state == .ready else { return }
+        guard !mode.onboardingComplete, state == .ready else { return }
         mode.completeOnboarding()
     }
 }
