@@ -42,7 +42,7 @@ Do not modify `/Users/ryanliu/Documents/uclaw`; this plan belongs only to the ne
 - Create: `ulooi/Assets.xcassets/FaceAssets/face_blink.imageset/Contents.json`
 - Create: `docs/design-references/m1-5-minimal-oled-eyes/runtime-assets/README.md`
 
-- [ ] **Step 1: Generate six PNG assets from the approved prompt family**
+- [x] **Step 1: Generate six PNG assets from the approved prompt family**
 
 Use the approved Minimal OLED Eyes visual grammar from `docs/design-references/m1-5-minimal-oled-eyes/README.md`.
 
@@ -63,7 +63,7 @@ Every generated image must keep these constraints:
 Generate a full-screen ulooi Face Mode image for iPhone landscape orientation, aspect ratio 19.5:9. Solid pure black OLED background across the entire image. No device frame, no border, no bezel, no mockup, no card, no panels, no robot body, no robot head shell, no white background, no outer oval halo, no decorative atmosphere. Only show facial expression elements floating on black: mostly two simple glowing cyan LED anime robot eyes, centered safely within an imaginary iPhone rounded-screen safe area with generous margins. Style: minimal OLED eyes, cute futuristic robot companion, clever, warm, witty, family member. No text, no logo, no watermark.
 ```
 
-- [ ] **Step 2: Copy generated images into asset catalog**
+- [x] **Step 2: Copy generated images into asset catalog**
 
 Copy files into:
 
@@ -106,7 +106,7 @@ Create each imageset `Contents.json` with the matching filename:
 
 Repeat with the correct filename for each state.
 
-- [ ] **Step 3: Document asset provenance**
+- [x] **Step 3: Document asset provenance**
 
 Create `docs/design-references/m1-5-minimal-oled-eyes/runtime-assets/README.md`:
 
@@ -137,7 +137,7 @@ These PNGs are app-bundled runtime candidates, not final designer-owned master a
 - No robot shell, white background, outer border, or large decorative aura.
 ```
 
-- [ ] **Step 4: Verify asset catalog is visible to Xcode**
+- [x] **Step 4: Verify asset catalog is visible to Xcode**
 
 Run:
 
@@ -147,7 +147,7 @@ xcodebuild build -project ulooi.xcodeproj -scheme ulooi -destination 'platform=i
 
 Expected: build succeeds. If Xcode reports a malformed asset catalog, fix the `Contents.json` filename entries.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add ulooi/Assets.xcassets/FaceAssets docs/design-references/m1-5-minimal-oled-eyes/runtime-assets/README.md
