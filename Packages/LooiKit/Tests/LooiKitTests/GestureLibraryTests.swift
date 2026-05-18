@@ -80,4 +80,27 @@ final class GestureLibraryTests: XCTestCase {
             XCTFail("Expected cliffLocked, got \(error)")
         }
     }
+
+    func test_waveWhenSuspendedAfterPriorMotion_throwsAndStopsMotion() async throws {
+        let mock = MockBLETransport()
+        var cliff: CliffState = .grounded
+        let motion = MotionController(transport: mock, cliffStateProvider: { cliff })
+        let gestures = GestureLibrary(
+            motion: motion,
+            head: HeadController(transport: mock),
+            light: LightController(transport: mock)
+        )
+
+        try motion.forward()
+        cliff = .frontSuspended
+
+        do {
+            try await gestures.perform(.wave)
+            XCTFail("Expected wave to throw cliffLocked when suspended")
+        } catch LooiError.cliffLocked {
+            XCTAssertEqual(motion.currentMotion, .stop)
+        } catch {
+            XCTFail("Expected cliffLocked, got \(error)")
+        }
+    }
 }

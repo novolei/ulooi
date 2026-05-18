@@ -24,9 +24,9 @@ public final class GestureLibrary {
     }
 
     public func wave() async throws {
-        try motion.spinLeft(speed: 40)
         defer { motion.stop() }
 
+        try motion.spinLeft(speed: 40)
         try await light.set(brightness: 0.85)
         try await head.lookUp()
         try await Task.sleep(for: .milliseconds(180))

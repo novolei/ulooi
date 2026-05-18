@@ -5,5 +5,5 @@ public enum GestureKind: String, CaseIterable, Identifiable, Sendable {
     case lookAtMe
     case sleep
 
-    public var id: String { rawValue }
+    public nonisolated var id: String { rawValue }
 }
