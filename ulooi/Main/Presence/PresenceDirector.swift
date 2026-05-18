@@ -7,6 +7,9 @@ import LooiKit
 final class PresenceDirector {
     private let session: LooiSession
     private let gestures: GestureLibrary
+    private let bodyNotConnectedLine = "Looi 的小身体还没连上。"
+
+    @ObservationIgnored private var gestureTask: Task<Void, Never>?
 
     private(set) var activeGesture: GestureKind?
     private(set) var isSleeping = false
@@ -18,7 +21,8 @@ final class PresenceDirector {
     }
 
     var state: PresenceState {
-        PresenceState.derive(
+        reconcileSessionState()
+        return PresenceState.derive(
             sessionState: session.state,
             cliffState: session.sensor.cliffState,
             lastTouchDate: session.sensor.lastTouchEvent?.timestamp,
@@ -29,6 +33,7 @@ final class PresenceDirector {
     }
 
     var face: FaceModel {
+        reconcileSessionState()
         if let lastErrorLine {
             return FaceModel.from(.errorRecoverable(lastErrorLine))
         }
@@ -40,16 +45,50 @@ final class PresenceDirector {
         lastErrorLine = nil
     }
 
-    func perform(_ kind: GestureKind) {
-        guard session.state == .ready else {
-            lastErrorLine = "Looi 的小身体还没连上。"
+    func reconcileSessionState() {
+        guard session.state != .ready else {
+            if lastErrorLine == bodyNotConnectedLine {
+                lastErrorLine = nil
+            }
             return
         }
 
-        Task { @MainActor in
+        if gestureTask != nil || activeGesture != nil {
+            gestureTask?.cancel()
+            session.motion.stop()
+            activeGesture = nil
+        }
+
+        isSleeping = false
+
+        if lastErrorLine != bodyNotConnectedLine {
+            lastErrorLine = nil
+        }
+    }
+
+    func perform(_ kind: GestureKind) {
+        reconcileSessionState()
+
+        guard activeGesture == nil, gestureTask == nil else {
+            return
+        }
+
+        guard session.state == .ready else {
+            lastErrorLine = bodyNotConnectedLine
+            return
+        }
+
+        activeGesture = kind
+        lastErrorLine = nil
+
+        gestureTask = Task { @MainActor in
+            defer {
+                activeGesture = nil
+                gestureTask = nil
+            }
+
             activeGesture = kind
             lastErrorLine = nil
-            defer { activeGesture = nil }
 
             do {
                 try await gestures.perform(kind)
