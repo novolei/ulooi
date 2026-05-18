@@ -24,18 +24,25 @@ public final class GestureLibrary {
     }
 
     public func wave() async throws {
-        defer { motion.stop() }
-
-        try motion.spinLeft(speed: 40)
-        try await light.set(brightness: 0.85)
-        try await head.lookUp()
-        try await Task.sleep(for: .milliseconds(180))
-        try motion.spinRight(speed: 40)
-        try await light.set(brightness: 1.0)
-        try await Task.sleep(for: .milliseconds(180))
-        motion.stop()
-        try await head.center()
-        try await light.set(brightness: 0.45)
+        do {
+            try motion.spinLeft(speed: 40)
+            try await light.set(brightness: 0.85)
+            try await head.lookUp()
+            try await Task.sleep(for: .milliseconds(180))
+            try motion.spinRight(speed: 40)
+            try await light.set(brightness: 1.0)
+            try await Task.sleep(for: .milliseconds(180))
+            try await restoreAwakePose()
+        } catch is CancellationError {
+            try? await restoreAwakePose()
+            throw CancellationError()
+        } catch LooiError.cliffLocked(let directions) {
+            motion.stop()
+            throw LooiError.cliffLocked(directions: directions)
+        } catch {
+            try? await restoreAwakePose()
+            throw error
+        }
     }
 
     public func lookAtMe() async throws {
@@ -48,5 +55,11 @@ public final class GestureLibrary {
         motion.stop()
         try await head.center()
         try await light.off()
+    }
+
+    private func restoreAwakePose() async throws {
+        motion.stop()
+        try await head.center()
+        try await light.set(brightness: 0.45)
     }
 }

@@ -14,7 +14,15 @@ struct ContentView: View {
             Group {
                 switch mode.surface(session: session, orientation: orientation) {
                 case .onboarding:
-                    OnboardingView(session: session)
+                    OnboardingView(
+                        session: session,
+                        continueInPhoneMode: {
+                            mode.completeOnboarding()
+                        },
+                        openSettings: {
+                            showingSettings = true
+                        }
+                    )
                 case .faceMode:
                     EmbodiedHomeView(director: director) {
                         showingSettings = true

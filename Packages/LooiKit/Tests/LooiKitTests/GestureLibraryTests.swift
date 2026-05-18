@@ -74,6 +74,38 @@ final class GestureLibraryTests: XCTestCase {
         XCTAssertTrue(mock.writes.contains { $0.characteristicUUID == LooiProtocol.Char.light.uuidString })
     }
 
+    func test_waveCancellationRestoresAwakePose() async throws {
+        let mock = MockBLETransport()
+        let motion = MotionController(transport: mock, cliffStateProvider: { .grounded })
+        let gestures = GestureLibrary(
+            motion: motion,
+            head: HeadController(transport: mock),
+            light: LightController(transport: mock)
+        )
+
+        let task = Task {
+            try await gestures.perform(.wave)
+        }
+
+        try await Task.sleep(for: .milliseconds(60))
+        task.cancel()
+
+        do {
+            try await task.value
+            XCTFail("Expected wave cancellation to throw CancellationError")
+        } catch is CancellationError {
+            XCTAssertEqual(motion.currentMotion, .stop)
+            XCTAssertTrue(mock.writes.contains {
+                $0.characteristicUUID == LooiProtocol.Char.head.uuidString && $0.data == LooiCommand.Head.center
+            })
+            XCTAssertTrue(mock.writes.contains {
+                $0.characteristicUUID == LooiProtocol.Char.light.uuidString && $0.data.count == 1 && $0.data[0] < 0x80
+            })
+        } catch {
+            XCTFail("Expected CancellationError, got \(error)")
+        }
+    }
+
     func test_waveWhenSuspended_throwsAndDoesNotStartMotion() async {
         let mock = MockBLETransport()
         let motion = MotionController(transport: mock, cliffStateProvider: { .frontSuspended })
