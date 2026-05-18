@@ -8,6 +8,17 @@
 
 ---
 
+## 0. 当前实现状态（2026-05-18）
+
+本 PRD 的产品愿景仍然成立，但当前代码已从早期 M0.5 探针推进到 **M1 PR1 foundation**：
+
+- `Packages/LooiKit` 已经是独立 Swift Package，包含 `LooiSession`、`BLETransport`、`CoreBluetoothTransport`、`MockBLETransport`、FEDA handshake、reconnect policy、Motion/Head/Light/Sensor controllers。
+- iOS app 仍以 DevTools 为 root，但 DevTools 已经切到 `LooiSession` / controllers：Scan 负责发现并触发连接，Send 负责 Motion/Head/Light 控制，Sense 展示 decoded sensor state。
+- M0.5 的真机 BLE 发现已经沉淀进 LooiKit：`FED0` 30ms heartbeat、`FED1` head pitch、`FED2` brightness、`FED8` battery poll、`FED9` telemetry stream、`FEDA` handshake。
+- 尚未实现：UCLAW WebSocket/CBOR transport、UCLAW 配对、语音/ASR/TTS、离线 Reflex、生产 Face/Gesture UI、长期记忆写回。
+
+**Repo 边界：** `ulooi` 与 `UCLAW` 分别单独管理 git。`ulooi` 当前 repo 为 `/Users/ryanliu/Documents/uclaw/ulooi`；对应的 UCLAW workspace/repo family 位于 `/Users/ryanliu/Documents/uclaw`。做集成时必须保持两个 repo 的分支、提交、PR 范围独立，不要混用旧的同名 UClaw 路径。
+
 ## 1. 产品愿景
 
 **ulooi 让 UCLAW Agent 拥有真正的实体身体。**
@@ -48,7 +59,9 @@
 
 **S0 — 第一次拆箱（M0.5 + M1）**
 
-> Ryan 拆开 Looi 包装，下载 ulooi，扫机器人底部 QR 码完成 BLE 配对。点 "挥手" 按钮，机器人挥手了。点 "灯光红色"，机器人变红。
+> Ryan 拆开 Looi 包装，下载 ulooi。当前 M1 PR1 阶段先通过 DevTools Scan 发现 Looi，点击 Connect via LooiSession 完成 BLE discover + FEDA handshake。连接成功后，Send tab 可以驱动轮子、头部 pitch、灯光亮度；Sense tab 可以看到电量、cliff/touch/IMU 类 telemetry。
+
+M1 后续生产 shell 阶段会把这个体验包装成正式 onboarding + face/gesture surface，而不是暴露 DevTools。
 
 DoD：30 秒内完成首次配对；点按钮到机器人响应延迟 < 200ms。
 
@@ -120,7 +133,8 @@ DoD：说话人识别准确率 > 90%（家庭 ≤ 4 人）；memory_graph 写入
 
 | 功能 | 用户能做什么 | 兑现里程碑 |
 |---|---|---|
-| 设备配对 | 扫 QR 码连 Looi 和 UCLAW | M1 + M2 |
+| Looi 设备连接 | 扫描 / 自动重连 Looi，完成 BLE handshake，控制 motion/head/light | M1 |
+| UCLAW 配对 | 扫 QR 码连 UCLAW，保存 token，自动续期 | M2 |
 | 语音对话 | 唤醒词触发，自然语言双向 | M3 |
 | 三端 presence | 任一端动作另两端可感知 | M4 |
 | 离线降级 | UCLAW 关机仍能对话 | M5 |
@@ -211,12 +225,21 @@ DoD：说话人识别准确率 > 90%（家庭 ≤ 4 人）；memory_graph 写入
 
 ### 流程 A — 首次配对
 
+当前实现态：
+
+1. App 启动 → DevTools root
+2. `LooiBootstrap` 等待 BLE poweredOn；若 UserDefaults 有上次 paired peripheral UUID，则自动 `session.connect(to:)`
+3. 首次连接：Scan tab → Start Scan → 选择 Looi → Connect via LooiSession
+4. `LooiSession` 执行 connect → service/characteristic discovery → FEDA handshake → 订阅 FED5/FED9 → `.ready`
+5. `.ready` 后启动 motor heartbeat 与 battery poll
+
+目标生产态：
+
 1. App 启动 → 检测无配对 → 引导页 "找一台 Looi"
 2. iPhone 蓝牙权限请求 → 扫描可见 Looi
-3. 用户点列表中的 Looi 设备 → 扫机器人底部 QR（含 device-specific pairing salt）
-4. BLE 连接 + 握手成功 → "找一台 UCLAW"
-5. mDNS / Tailscale 扫描 UCLAW → 列表选 → 在 macOS UCLAW 上点确认 + 扫 QR
-6. 完成 → 跳主屏
+3. 用户点列表中的 Looi 设备 → BLE 连接 + 握手成功
+4. M2 再进入 "找一台 UCLAW"：mDNS / Tailscale 扫描 UCLAW → macOS UCLAW 确认 + QR 配对
+5. 完成 → 跳主屏
 
 **关键 UX 决策（M1 spec）：** 这是单引导式还是用户可跳过中间步骤？建议单引导（首次配对是仪式感）。
 
@@ -263,6 +286,7 @@ DoD：说话人识别准确率 > 90%（家庭 ≤ 4 人）；memory_graph 写入
 3. **家人接受度** —— Persona 2（家人）首次见到客厅里有个会说话的机器人是否会反感？M3 后做家庭测试。
 4. **隐私担忧的可见性** —— 即使我们做了双重提示，"有摄像头一直对着客厅"的事实可能让访客不舒服。是否需要"访客模式"（一键关闭所有感知）？M4 决定。
 5. **唤醒词冲突** —— "Hey Looi" 是否会跟 Hey Siri 互相误触发？M3 实测。
+6. **传感器语义漂移** —— M0.5 真机样本与当前 `SensorController` 解码之间仍需 replay test 对齐，尤其是 FED9 cliff bitfield、IMU byte order/长度、touch zone。安全门不能建立在未验证 telemetry 语义上。
 
 ---
 
@@ -274,6 +298,8 @@ DoD：说话人识别准确率 > 90%（家庭 ≤ 4 人）；memory_graph 写入
 - **M2 - M3**（≈ 4 周）：UCLAW 接入 + 语音对话
 - **M4 - M5**（≈ 4 周）：三端同在 + 离线降级
 - **M6 - M8**（v1 后滚动）：vision + speaker id + memory writeback
+
+当前切片判断：M1 PR1 foundation 已完成 LooiKit 包化和 controller/test 基础；M1 后续应先补齐 sensor replay / production shell / gestures，再进入 M2 UCLAW transport。
 
 v1 (P0) 落地目标：**8 周内可日常使用，2026 年内迭代完成 P1**。
 
