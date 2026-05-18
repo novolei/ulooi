@@ -6,6 +6,7 @@ struct ContentView: View {
     @State private var mode = ModeController()
     @State private var director = PresenceDirector(session: LooiBootstrap.shared.session)
     @State private var showingSettings = false
+    @State private var onboardingWasVisible = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -17,6 +18,9 @@ struct ContentView: View {
                     OnboardingView(session: session) {
                         mode.completeOnboarding()
                     }
+                    .onAppear {
+                        onboardingWasVisible = true
+                    }
                 case .faceMode:
                     EmbodiedHomeView(director: director) {
                         showingSettings = true
@@ -26,7 +30,7 @@ struct ContentView: View {
                         showingSettings = true
                     }
                 case .developer:
-                    DevToolsRootView()
+                    developerSurface
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
@@ -37,9 +41,36 @@ struct ContentView: View {
                 showingSettings = false
             }
         }
-        .onChange(of: session.state.description) {
+        .onChange(of: session.state) { _, newState in
             director.reconcileSessionState()
+            completeOnboardingIfReady(newState)
         }
+    }
+
+    private var developerSurface: some View {
+        ZStack(alignment: .topTrailing) {
+            DevToolsRootView()
+
+            Button {
+                mode.developerOpen = false
+            } label: {
+                Label("Done", systemImage: "xmark.circle.fill")
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .labelStyle(.titleAndIcon)
+                    .padding(.horizontal, 14)
+                    .frame(height: 40)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.regular)
+            .padding(.top, 12)
+            .padding(.trailing, 16)
+            .accessibilityLabel("Close DevTools")
+        }
+    }
+
+    private func completeOnboardingIfReady(_ state: SessionState) {
+        guard onboardingWasVisible, !mode.onboardingComplete, state == .ready else { return }
+        mode.completeOnboarding()
     }
 }
 

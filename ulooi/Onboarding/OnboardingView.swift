@@ -30,15 +30,15 @@ struct OnboardingView: View {
 
             Button {
                 session.startScanAndConnect()
-                complete()
             } label: {
-                Label("Find Looi", systemImage: "wave.3.right")
+                Label(buttonTitle, systemImage: "wave.3.right")
                     .font(.system(size: 17, weight: .semibold, design: .rounded))
                     .frame(maxWidth: .infinity)
                     .frame(height: 52)
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
+            .disabled(session.state.isInProgress)
 
             Spacer(minLength: 20)
         }
@@ -46,6 +46,10 @@ struct OnboardingView: View {
         .padding(.vertical, 24)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .background(Color(.systemBackground))
+    }
+
+    private var buttonTitle: String {
+        session.state.isInProgress ? "Finding Looi" : "Find Looi"
     }
 }
 
