@@ -7,7 +7,7 @@ import LooiKit
 final class PresenceDirector {
     private let session: LooiSession
     private let gestures: GestureLibrary
-    private let bodyNotConnectedLine = "Looi 的小身体还没连上。"
+    private static let bodyNotConnectedLine = "Looi 的小身体还没连上。"
 
     @ObservationIgnored private var gestureTask: Task<Void, Never>?
 
@@ -21,8 +21,7 @@ final class PresenceDirector {
     }
 
     var state: PresenceState {
-        reconcileSessionState()
-        return PresenceState.derive(
+        PresenceState.derive(
             sessionState: session.state,
             cliffState: session.sensor.cliffState,
             lastTouchDate: session.sensor.lastTouchEvent?.timestamp,
@@ -33,7 +32,10 @@ final class PresenceDirector {
     }
 
     var face: FaceModel {
-        reconcileSessionState()
+        if session.state == .ready && lastErrorLine == Self.bodyNotConnectedLine {
+            return FaceModel.from(state)
+        }
+
         if let lastErrorLine {
             return FaceModel.from(.errorRecoverable(lastErrorLine))
         }
@@ -47,23 +49,18 @@ final class PresenceDirector {
 
     func reconcileSessionState() {
         guard session.state != .ready else {
-            if lastErrorLine == bodyNotConnectedLine {
+            if lastErrorLine == Self.bodyNotConnectedLine {
                 lastErrorLine = nil
             }
             return
         }
 
-        if gestureTask != nil || activeGesture != nil {
-            gestureTask?.cancel()
-            session.motion.stop()
-            activeGesture = nil
-        }
-
+        gestureTask?.cancel()
+        gestureTask = nil
+        session.motion.stop()
+        activeGesture = nil
         isSleeping = false
-
-        if lastErrorLine != bodyNotConnectedLine {
-            lastErrorLine = nil
-        }
+        lastErrorLine = nil
     }
 
     func perform(_ kind: GestureKind) {
@@ -74,7 +71,7 @@ final class PresenceDirector {
         }
 
         guard session.state == .ready else {
-            lastErrorLine = bodyNotConnectedLine
+            lastErrorLine = Self.bodyNotConnectedLine
             return
         }
 
@@ -93,6 +90,8 @@ final class PresenceDirector {
             do {
                 try await gestures.perform(kind)
                 isSleeping = (kind == .sleep)
+            } catch is CancellationError {
+                return
             } catch LooiError.cliffLocked {
                 lastErrorLine = "脚下需要支撑，先不乱动。"
             } catch {
