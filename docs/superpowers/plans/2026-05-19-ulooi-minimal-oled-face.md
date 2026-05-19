@@ -163,7 +163,7 @@ git commit -m "feat(face): add minimal OLED runtime assets"
 - Create: `ulooi/Main/Face/Models/FaceRenderMode.swift`
 - Create: `ulooi/Main/Face/Assets/FaceAssetCatalog.swift`
 
-- [ ] **Step 1: Create `FaceAssetVariant`**
+- [x] **Step 1: Create `FaceAssetVariant`**
 
 Create `ulooi/Main/Face/Models/FaceAssetVariant.swift`:
 
@@ -186,7 +186,7 @@ struct FaceAssetVariant: Equatable, Identifiable {
 }
 ```
 
-- [ ] **Step 2: Create render mode**
+- [x] **Step 2: Create render mode**
 
 Create `ulooi/Main/Face/Models/FaceRenderMode.swift`:
 
@@ -197,7 +197,7 @@ enum FaceRenderMode: Equatable {
 }
 ```
 
-- [ ] **Step 3: Create asset catalog names**
+- [x] **Step 3: Create asset catalog names**
 
 Create `ulooi/Main/Face/Assets/FaceAssetCatalog.swift`:
 
@@ -227,7 +227,7 @@ enum FaceAssetCatalog {
 }
 ```
 
-- [ ] **Step 4: Build**
+- [x] **Step 4: Build**
 
 Run:
 
@@ -237,7 +237,7 @@ xcodebuild build -project ulooi.xcodeproj -scheme ulooi -destination 'platform=i
 
 Expected: build succeeds.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add ulooi/Main/Face/Models/FaceAssetVariant.swift ulooi/Main/Face/Models/FaceRenderMode.swift ulooi/Main/Face/Assets/FaceAssetCatalog.swift
