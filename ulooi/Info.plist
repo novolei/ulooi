@@ -4,6 +4,8 @@
 <dict>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>ulooi needs Bluetooth to connect to your Looi robot — discovering it, sending motion / light commands, and reading touch sensor events.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>ulooi needs camera access to scan the UCLAW pairing QR code and establish a secure transport link.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

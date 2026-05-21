@@ -1,0 +1,143 @@
+; ulooi-UCLAW Wire Envelope Protocol v1
+; This schema defines the structure of all messages sent over the WebSocket 
+; between the iOS client (ulooi) and the desktop backend (UCLAW).
+
+envelope = {
+  v: uint,                      ; Major protocol version, MUST be 1
+  id: tstr,                     ; Message correlation ID (ULID or UUIDv4 string)
+  ts: uint,                     ; Sender wall clock timestamp (ms since Epoch)
+  src: tstr,                    ; Sender identifier ("ulooi-<uuid>" or "uclaw-desktop-<uuid>")
+  kind: tstr,                   ; Namespace event type, e.g., "system.ping", "embodiment.touch"
+  ? reply_to: tstr,             ; Optional message ID correlating this as a response
+  payload: payload_types        ; Type-specific payload matching 'kind'
+}
+
+payload_types = 
+  system_ping /
+  system_pong /
+  system_state_changed /
+  pairing_request /
+  pairing_response /
+  voice_partial /
+  voice_final /
+  agent_state /
+  agent_token /
+  embodiment_touch /
+  embodiment_battery /
+  embodiment_rssi /
+  embodiment_cliff_event /
+  embodiment_imu_vector /
+  actuation_motion_cmd /
+  actuation_light_cmd /
+  actuation_head_cmd /
+  actuation_gesture_cmd /
+  tts_text_chunk /
+  tts_playback_progress
+
+; --- System Namespace ---
+system_ping = {
+  ? session_id: tstr
+}
+
+system_pong = {
+  ? session_id: tstr
+}
+
+system_state_changed = {
+  old_state: tstr,              ; "green" | "yellow" | "red"
+  new_state: tstr,
+  reason: tstr
+}
+
+; --- Pairing Namespace ---
+pairing_request = {
+  client_static_pk: bytes,      ; Client's static Ed25519 Public Key (32 bytes)
+  client_eph_pk: bytes,         ; Client's ephemeral X25519 Public Key (32 bytes)
+  client_name: tstr,            ; Friendly name of the client device
+  signature: bytes              ; Sign_sk_client_static(client_eph_pk || server_eph_pk)
+}
+
+pairing_response = {
+  server_static_pk: bytes,      ; Server's static Ed25519 Public Key (32 bytes)
+  token_auth: bytes,            ; Secure 32-byte long-term auth token, encrypted with derived K_shared
+  signature: bytes              ; Sign_sk_server_static(server_eph_pk || client_eph_pk)
+}
+
+; --- Voice Namespace (ASR) ---
+voice_partial = {
+  text: tstr,
+  seq: uint
+}
+
+voice_final = {
+  text: tstr,
+  ? speaker_id: tstr
+}
+
+; --- Agent Namespace ---
+agent_state = {
+  state: tstr,                  ; "idle" | "thinking" | "speaking" | "listening"
+  ? context_summary: tstr
+}
+
+agent_token = {
+  token: tstr,
+  seq: uint
+}
+
+; --- Embodiment Namespace (Sensors) ---
+embodiment_touch = {
+  zone: tstr,                   ; "head" | "back" | "left_side" | "right_side"
+  state: tstr                   ; "began" | "moved" | "ended" | "cancelled"
+}
+
+embodiment_battery = {
+  percentage: float,            ; 0.0 to 100.0
+  is_charging: bool
+}
+
+embodiment_rssi = {
+  dbm: int
+}
+
+embodiment_cliff_event = {
+  front: bool,
+  left: bool,
+  right: bool
+}
+
+embodiment_imu_vector = {
+  acc: [float, float, float],   ; [x, y, z] in Gs
+  gyro: [float, float, float]   ; [x, y, z] in deg/s
+}
+
+; --- Actuation Namespace (Commands) ---
+actuation_motion_cmd = {
+  speed: float,                 ; Normalized linear speed (-1.0 to 1.0)
+  turn: float                   ; Normalized angular speed (-1.0 to 1.0)
+}
+
+actuation_light_cmd = {
+  mode: tstr,                   ; "solid" | "pulse" | "blink" | "rainbow" | "off"
+  rgb: [uint, uint, uint],      ; [R, G, B] values (0-255)
+  ? duration_ms: uint
+}
+
+actuation_head_cmd = {
+  pitch: int                    ; Absolute head angle in degrees (-15 to 15)
+}
+
+actuation_gesture_cmd = {
+  gesture: tstr
+}
+
+; --- TTS Namespace ---
+tts_text_chunk = {
+  text: tstr,
+  is_final: bool
+}
+
+tts_playback_progress = {
+  played_ms: uint,
+  total_ms: uint
+}

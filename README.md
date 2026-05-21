@@ -1,6 +1,6 @@
 # ulooi
 
-**iOS app that gives the [UCLAW](https://github.com/novolei/uclaw-new) Agent an embodied presence through the Looi robot.**
+**iOS app that gives the UCLAW Agent an embodied presence through the Looi robot.**
 
 > iPhone is the sensory surface (mic / camera / speaker).
 > Looi robot is the kinetic body (motion / light / touch).
@@ -13,9 +13,10 @@
 
 | Milestone | What | State |
 |---|---|---|
-| **M0** | Umbrella spec | ✅ approved — see [`2026-05-17-ulooi-design.md`](https://github.com/novolei/uclaw-new/blob/main/docs/superpowers/specs/2026-05-17-ulooi-design.md) (canonical, lives in UCLAW repo) |
-| **M0.5** | Hardware reachability prototype (probe app — DevTools surface) | 🚧 in progress — scaffold ready, hardware probe pending. See [`docs/m0-5-prototype-findings.md`](docs/m0-5-prototype-findings.md). |
-| **M1** | LooiKit + iOS shell + pairing UX (no UCLAW dep) | pending |
+| **M0** | Umbrella spec | ✅ approved — canonical program design lives in the companion UCLAW repo/workspace |
+| **M0.5** | Hardware reachability prototype (probe app — DevTools surface) | ✅ completed against real Looi hardware. See [`docs/m0-5-prototype-findings.md`](docs/m0-5-prototype-findings.md). |
+| **M1 PR1** | Extract `Packages/LooiKit`, typed session/controllers, mock transport | ✅ implemented; `swift test --package-path Packages/LooiKit` passes |
+| **M1 PR2/PR3** | Production shell, gestures, face/dreams surface, Settings → Developer | pending |
 | **M2** | UCLAW transport layer (WebSocket + pairing) | pending |
 | **M3** | Voice loop (S1 体验) | pending |
 | **M4** | Three-way presence (S2 体验) | pending |
@@ -40,11 +41,19 @@ Audio (mic + speaker) and vision (camera) run on the iPhone natively; the Looi r
 
 Full design in the [M0 umbrella spec](https://github.com/novolei/uclaw-new/blob/main/docs/superpowers/specs/2026-05-17-ulooi-design.md).
 
+## Repository boundary
+
+`ulooi` and `UCLAW` are separate git repositories. Do not share branches, commits, or PR scopes across them.
+
+- This repo: `/Users/ryanliu/Documents/uclaw/ulooi`
+- Companion UCLAW workspace/repo family: `/Users/ryanliu/Documents/uclaw`
+- When working on ulooi/UCLAW integration, treat the UCLAW repo under that workspace as the corresponding backend/cortex source of truth, not older similarly named UClaw paths.
+
 ## Documentation
 
 - [`docs/prd.md`](docs/prd.md) — Product Requirements Document (personas, user stories, UX flows, success metrics)
 - [`docs/architecture.md`](docs/architecture.md) — Overall architecture (tech stack, module layering, data model, protocol codegen, file structure)
-- [M0 umbrella spec](https://github.com/novolei/uclaw-new/blob/main/docs/superpowers/specs/2026-05-17-ulooi-design.md) (cross-project program design, lives in UCLAW repo)
+- M0 umbrella spec (cross-project program design, lives in the companion UCLAW repo/workspace)
 
 iOS implementation: **Pure SwiftUI / Swift**, no Rust on iOS. Protocol consistency with UCLAW achieved via [CDDL](https://datatracker.ietf.org/doc/html/rfc8610) schema codegen (a single source spec generates both Swift `Codable` types and Rust serde structs). See [architecture §2](docs/architecture.md#2-技术栈选择) for rationale.
 
@@ -62,27 +71,39 @@ xed ulooi.xcodeproj    # open in Xcode 16+
 # Cmd+R to build & run on a real iPhone (BLE doesn't work in simulator)
 ```
 
-**Current state (M0.5):** The app boots directly into the **DevTools probe surface** — a 5-tab tool for reverse-engineering Looi's BLE protocol against the current firmware. Tabs: Scan / Inspect / Send / Sense / Logs. In M1 this will be demoted to Settings → Developer, and the production UI will take over the root.
+**Current state:** The app still boots directly into the **DevTools probe surface**, but the probe now drives the M1 `LooiSession` / controller stack instead of the old inline `BLECentral`. Tabs: Scan / Inspect / Send / Sense / Logs. In a later M1 shell PR this surface will move to Settings → Developer, and the production face/gesture UI will take over the root.
 
-Probe findings are recorded in [`docs/m0-5-prototype-findings.md`](docs/m0-5-prototype-findings.md) as you go; the doc becomes input to the M1 LooiKit spec.
+Probe findings are recorded in [`docs/m0-5-prototype-findings.md`](docs/m0-5-prototype-findings.md) and have already been folded into the current `Packages/LooiKit` foundation.
 
-### Module layout (M0.5)
+### Module layout (current)
 
 ```
-ulooi/ulooi/
-├── ulooiApp.swift / ContentView.swift   — app entry, routes to DevTools
-├── DevTools/                            — probe surface (Settings → Developer in M1)
-│   ├── DevToolsRootView.swift           — TabView container
-│   └── Probe/
-│       ├── ScanView.swift               — BLE peripheral scanner
-│       ├── InspectView.swift            — GATT topology browser
-│       ├── CommandView.swift            — send raw bytes / preset commands
-│       ├── SenseView.swift              — subscribe to notify characteristics
-│       ├── LogsView.swift               — live RAW / INFO / WARN / ERR log viewer
-│       └── ProbeLog.swift               — shared logging
-└── LooiKit/                             — early skeleton (will move to Packages/LooiKit in M1)
-    ├── BLECentral.swift                 — CoreBluetooth wrapper (@MainActor @Observable)
-    └── LooiCommand.swift                — reference command dict (UNVERIFIED in M0.5)
+ulooi/
+├── ulooi.xcodeproj/
+├── ulooi/
+│   ├── ulooiApp.swift / ContentView.swift      — app entry, currently routes to DevTools
+│   ├── App/LooiBootstrap.swift                 — app singleton wiring CoreBluetoothTransport + LooiSession
+│   ├── DevTools/                               — probe surface (future Settings → Developer)
+│   │   ├── DevToolsRootView.swift              — TabView container
+│   │   └── Probe/
+│   │       ├── ScanView.swift                  — BLE peripheral scanner + LooiSession connect
+│   │       ├── InspectView.swift               — session/controller state
+│   │       ├── CommandView.swift               — Motion/Head/Light controller commands
+│   │       ├── SenseView.swift                 — decoded FED5/FED9 sensor surface
+│   │       ├── LogsView.swift                  — live INFO/WARN/ERR log viewer
+│   │       └── ProbeLog.swift                  — shared in-app logging
+│   └── Shared/                                 — app-only logging/build metadata
+└── Packages/LooiKit/
+    ├── Sources/LooiKit/
+    │   ├── Protocol/                           — UUIDs, timing, FEDA handshake runner
+    │   ├── Transport/                          — BLETransport + CoreBluetoothTransport
+    │   ├── Session/                            — LooiSession, state machine, reconnect policy
+    │   ├── Controllers/                        — Motion, Head, Light, Sensor
+    │   ├── Commands/                           — typed BLE command bytes
+    │   ├── Models/                             — MotionState, CliffState, etc.
+    │   └── Errors/                             — LooiError
+    ├── Sources/LooiKitTesting/                 — MockBLETransport + test helpers
+    └── Tests/LooiKitTests/                     — package unit tests
 ```
 
 ## License

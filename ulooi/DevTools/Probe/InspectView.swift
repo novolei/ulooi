@@ -1,33 +1,37 @@
-import CoreBluetooth
+import LooiKit
 import SwiftUI
 
+/// DevTools Inspect tab — shows the current session state and connected
+/// peripheral identity.
+///
+/// # M1 deliberate limitation
+/// Raw GATT topology inspection (findCharacteristic / write / subscribe on raw
+/// CBCharacteristic objects) is NOT exposed by the LooiKit Session API by design
+/// — all BLE I/O goes through the four Controllers. The former Discover / Read /
+/// Subscribe / Copy-topology buttons are therefore not available in this tab.
+///
+/// TODO (M2): If raw topology inspection is still needed for hardware debugging,
+/// expose a `DevToolsTransportInspector` that wraps CoreBluetoothTransport and
+/// surfaces the discovered services after `discoverServicesAndCharacteristics`.
 struct InspectView: View {
-    let central: BLECentral
+    let session: LooiSession
     let log: ProbeLog
 
     var body: some View {
         NavigationStack {
             List {
-                Section("Connection") {
-                    if let p = central.connectedPeripheral {
-                        VStack(alignment: .leading) {
-                            Text(p.name ?? "(unnamed)")
-                                .font(.headline)
-                            Text(p.identifier.uuidString)
-                                .font(.caption2.monospaced())
-                                .foregroundStyle(.secondary)
-                            Text("state: \(stateLabel(p.state))")
-                                .font(.caption)
-                        }
+                Section("Session") {
+                    LabeledContent("State", value: session.state.description)
+                    if let p = session.currentPeripheral {
+                        LabeledContent("Name", value: p.name)
+                        LabeledContent("ID", value: p.id.uuidString)
+                            .font(.caption2.monospaced())
                         HStack {
-                            Button("Discover all services") {
-                                central.discoverAllServices()
-                            }
-                            .buttonStyle(.bordered)
                             Spacer()
                             Button("Disconnect", role: .destructive) {
-                                central.disconnect()
+                                session.disconnect()
                             }
+                            .buttonStyle(.bordered)
                         }
                     } else {
                         Text("Not connected. Go to Scan tab.")
@@ -35,110 +39,37 @@ struct InspectView: View {
                     }
                 }
 
-                if !central.discoveredServices.isEmpty {
-                    Section("GATT topology (\(central.discoveredServices.count) services)") {
-                        ForEach(central.discoveredServices, id: \.uuid) { service in
-                            ServiceRow(service: service, central: central)
-                        }
+                Section("Controllers") {
+                    LabeledContent("Motion", value: session.motion.currentMotion.label)
+                    LabeledContent("Heartbeat ticks", value: "\(session.motion.heartbeatTicks)")
+                    LabeledContent("Battery polls", value: "\(session.sensor.batteryPollCount)")
+                    if let pct = session.sensor.batteryPercent {
+                        LabeledContent("Battery", value: "\(pct)%")
                     }
+                    LabeledContent("Cliff state") {
+                        let cs = session.sensor.cliffState
+                        Text(cs.isGrounded ? "grounded" : "0x\(String(cs.rawValue, radix: 16, uppercase: true))")
+                            .foregroundStyle(cs.isGrounded ? .green : .orange)
+                    }
+                    LabeledContent("IMU x/y/z", value: {
+                        let imu = session.sensor.imu
+                        return "\(imu.x) / \(imu.y) / \(imu.z)"
+                    }())
+                }
 
-                    Section {
-                        Button("Copy topology as JSON") {
-                            let json = serializeTopology(central.discoveredServices)
-                            #if canImport(UIKit)
-                            UIPasteboard.general.string = json
-                            #endif
-                            log.info("topology copied to clipboard (\(json.count) chars)")
-                        }
-                    }
+                Section {
+                    Text("[deferred — raw GATT topology inspection not exposed by LooiKit Session API. All BLE I/O goes through MotionController / HeadController / LightController / SensorController. Use the Send tab for preset commands.]")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } header: {
+                    Text("Raw GATT topology")
                 }
             }
             .navigationTitle("Inspect")
         }
     }
-
-    private func stateLabel(_ state: CBPeripheralState) -> String {
-        switch state {
-        case .disconnected: return "disconnected"
-        case .connecting: return "connecting"
-        case .connected: return "connected"
-        case .disconnecting: return "disconnecting"
-        @unknown default: return "unknown"
-        }
-    }
-
-    private func serializeTopology(_ services: [CBService]) -> String {
-        var lines: [String] = []
-        for s in services {
-            lines.append("- service \(s.uuid.uuidString)")
-            for c in s.characteristics ?? [] {
-                let props = CharacteristicProperties(rawValue: c.properties.rawValue)
-                lines.append("  - char \(c.uuid.uuidString)  props=[\(props.description)]")
-            }
-        }
-        return lines.joined(separator: "\n")
-    }
-}
-
-private struct ServiceRow: View {
-    let service: CBService
-    let central: BLECentral
-
-    var body: some View {
-        DisclosureGroup {
-            ForEach(service.characteristics ?? [], id: \.uuid) { char in
-                CharacteristicRow(characteristic: char, central: central)
-            }
-        } label: {
-            VStack(alignment: .leading) {
-                Text(service.uuid.uuidString)
-                    .font(.subheadline.monospaced())
-                Text("\(service.characteristics?.count ?? 0) characteristics")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-}
-
-private struct CharacteristicRow: View {
-    let characteristic: CBCharacteristic
-    let central: BLECentral
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(characteristic.uuid.uuidString)
-                .font(.caption.monospaced())
-            let props = CharacteristicProperties(rawValue: characteristic.properties.rawValue)
-            Text(props.description)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            HStack {
-                if props.contains(.read) {
-                    Button("Read") {
-                        central.connectedPeripheral?.readValue(for: characteristic)
-                    }
-                    .controlSize(.small)
-                    .buttonStyle(.bordered)
-                }
-                if props.contains(.notify) {
-                    Button(characteristic.isNotifying ? "Unsubscribe" : "Subscribe") {
-                        if characteristic.isNotifying {
-                            central.unsubscribe(from: characteristic)
-                        } else {
-                            central.subscribe(to: characteristic)
-                        }
-                    }
-                    .controlSize(.small)
-                    .buttonStyle(.bordered)
-                }
-                Spacer()
-            }
-        }
-        .padding(.vertical, 2)
-    }
 }
 
 #Preview {
-    InspectView(central: BLECentral.shared, log: ProbeLog.shared)
+    InspectView(session: LooiBootstrap.shared.session, log: ProbeLog.shared)
 }

@@ -8,6 +8,29 @@
 
 ---
 
+## 0. 当前代码真相（2026-05-18）
+
+本文档描述的是目标架构 + 当前实现的对照。当前仓库已经完成 **M1 PR1 LooiKit foundation**，但还没有进入 UCLAW transport / voice / reflex / production face shell。
+
+已实现：
+
+- `Packages/LooiKit` Swift Package：`LooiSession`、`BLETransport`、`CoreBluetoothTransport`、`MockBLETransport`、`HandshakeRunner`、`SessionStateMachine`、`ReconnectPolicy`、Motion/Head/Light/Sensor controllers、typed command bytes、LooiKit unit tests。
+- `ulooi` app target：`ContentView` 仍然进入 DevTools；`LooiBootstrap` 创建共享 `CoreBluetoothTransport + LooiSession` 并做 cold-launch auto-reconnect；DevTools tabs 已经通过 LooiSession/controllers 操作硬件。
+- M0.5 真机结论已进入实现：FEDA handshake、FED0 30ms `.withoutResponse` heartbeat、FED1 pitch、FED2 brightness、FED8 4s battery poll、FED9 telemetry subscription。M1.2 DevTools 真机修正：FED1 从中心 `0x5A` 追踪 pitch，写入使用 `.withoutResponse`；DevTools label-wise Look Up 向更小 byte 步进，Look Down 向更大 byte 步进，步进 `0x20`；FED2 app-level full 使用 signed positive max `0x7F`，避开不可靠的 `0x80...0xFF`。
+
+未实现：
+
+- `Modules/Transport` 中的 CBOR-over-WebSocket、mDNS/Tailscale discovery、QR pairing、TLS pinning。
+- `Modules/Sensory` / `Modules/Reflex` / `Storage`。
+- CDDL schema codegen pipeline 与 UCLAW Rust 端同步。
+- Production Onboarding/Home/Conversation/Privacy/Settings，以及 Face Engine / GestureLibrary。
+
+Repo 边界：
+
+- `ulooi` repo: `/Users/ryanliu/Documents/uclaw/ulooi`
+- 对应 UCLAW workspace/repo family: `/Users/ryanliu/Documents/uclaw`
+- 两者单独管理 git；branch、commit、PR、status 不共享。任何跨端改动都必须显式说明分别落在哪个 repo。
+
 ## 1. 架构总览
 
 ```
@@ -82,7 +105,7 @@
 
 | 类别 | 选择 | 备注 |
 |---|---|---|
-| 语言 | Swift 5.10+ | strict concurrency, `any` existentials |
+| 语言 | Swift 6.x | strict concurrency；当前 `Packages/LooiKit/Package.swift` 使用 Swift tools 6.2 / language mode v6 |
 | UI | SwiftUI（iOS 18+ API） | 不引入 UIKit 桥；纯 SwiftUI |
 | 异步 | Swift Concurrency（async/await + actor） | 不用 Combine，不用 RxSwift |
 | 持久化 | [GRDB](https://github.com/groue/GRDB.swift) | SQLite WAL queue + 元数据；Apple SQLite 太底层 |
@@ -127,58 +150,77 @@
 
 **单一职责：** 把 Looi 机器人变成一个有类型的 Swift 对象。
 
-```swift
-public protocol LooiDevice: Sendable {
-    var id: LooiDeviceID { get }
-    var rssi: AsyncStream<Int> { get }
-    var battery: AsyncStream<LooiBattery> { get }
+当前 public handle 是 `@MainActor @Observable final class LooiSession`，不是早期草案里的 `LooiDevice` protocol。`LooiSession` 持有：
 
-    var motion: any MotionController { get }
-    var light: any LightController { get }
-    var sensor: any SensorStream { get }
-}
+- `state: SessionState`
+- `currentPeripheral: DiscoveredPeripheral?`
+- `motion: MotionController`
+- `head: HeadController`
+- `light: LightController`
+- `sensor: SensorController`
+- `pairedPeripheralID`（UserDefaults 持久化）
+- `reconnectPolicy`
 
-public protocol MotionController: Sendable {
-    func wave(intensity: Double) async throws
-    func turnHead(to angle: Angle) async throws
-    func executeRaw(_ command: LooiCommand) async throws
-}
+核心流程：
 
-public protocol LightController: Sendable {
-    func setColor(_ color: LooiColor, transition: Duration) async throws
-    func pulse(at frequency: Hertz, color: LooiColor) async throws
-}
-
-public actor SensorStream {
-    public var touches: AsyncStream<LooiTouch> { ... }
-    public var motions: AsyncStream<LooiMotion> { ... }
-}
+```text
+scan/connect
+  -> discoverServicesAndCharacteristics
+  -> HandshakeRunner:
+       read 2A29
+       write FEDA 0x01
+       subscribe FED5 + FED9
+       sleep 300ms
+       write FEDA 0x03
+  -> SensorController.consume(FED5, FED9)
+  -> .ready
+  -> MotionController.startHeartbeat()
+  -> SensorController.startBatteryPoll()
 ```
 
 **内部结构：**
 
 ```
 Packages/LooiKit/Sources/LooiKit/
-├── Public/
-│   ├── LooiDevice.swift           # 协议
-│   ├── LooiCommand.swift          # 命令字典
-│   ├── LooiColor.swift / LooiTouch.swift / ...  # 值类型
-├── BLE/
-│   ├── BLECentral.swift            # CoreBluetooth wrapper
-│   ├── BLEConnection.swift         # 单设备会话
-│   ├── BLEProtocol.swift           # GATT services / characteristics UUIDs
-│   └── BLEDecoder.swift            # raw bytes → typed events
-├── Codec/
-│   ├── CommandEncoder.swift        # high-level command → BLE writes
-│   └── TelemetryDecoder.swift
-└── Impl/
-    ├── BLEMotionController.swift
-    ├── BLELightController.swift
-    └── BLESensorStream.swift
+├── LooiKit.swift
+├── Protocol/
+│   ├── LooiProtocol.swift          # CBUUID constants, timing, FEDA bytes
+│   ├── HandshakeRunner.swift       # typed 2A29/FEDA/FED5/FED9 init sequence
+│   └── HandshakeStep.swift
+├── Transport/
+│   ├── BLETransport.swift          # test seam
+│   ├── CoreBluetoothTransport.swift
+│   ├── DiscoveredPeripheral.swift
+│   └── WriteType.swift
+├── Session/
+│   ├── LooiSession.swift
+│   ├── SessionState.swift
+│   ├── SessionStateMachine.swift
+│   └── ReconnectPolicy.swift
+├── Controllers/
+│   ├── MotionController.swift      # FED0 30ms heartbeat + cliff hard-block
+│   ├── HeadController.swift        # FED1 pitch
+│   ├── LightController.swift       # FED2 brightness
+│   └── SensorController.swift      # FED5/FED9 decode + FED8 poll
+├── Commands/
+│   ├── LooiCommand*.swift          # movement/head/light/handshake/rich bytes
+├── Models/
+│   ├── MotionState.swift
+│   ├── CliffState.swift
+│   └── CharacteristicProperties.swift
+├── Errors/
+│   └── LooiError.swift
+└── Util/
+    ├── DataHexCodec.swift
+    └── ComparableClamped.swift
+
+Packages/LooiKit/Sources/LooiKitTesting/
+├── MockBLETransport.swift
+├── FakeClock.swift
+└── LooiKitTesting.swift
 ```
 
-**M1 实装范围：** `MotionController` + `SensorStream`。`LightController` M3 加。
-**测试策略：** `MockLooiDevice` (in `Sources/LooiKitTesting/`) 注入到上层；BLE 层有 protocol-level recordings (`.bleskel` 文件) 喂给 BLEDecoder 做回放测试。
+**当前测试策略：** `MockBLETransport` 注入 `LooiSession` / controllers，覆盖 command bytes、handshake、session transitions、heartbeat、sensor decode、battery poll、reconnect policy。尚未建立真实 `.bleskel` replay fixture；这是下一步补齐传感器语义的关键。
 
 ### 4.2 SENSORY（音视频 IO）
 
@@ -233,6 +275,11 @@ step 4: 整段 TTS 结束 → 灯光恢复 idle、头部回中
 
 **重要：** Transport 不知道任何业务事件含义。`EventBus.publish(envelope)` 后由 REFLEX/SENSORY 注册的 handler 处理。这让协议层与业务解耦，新事件类型只需注册 handler。
 
+**当前状态：** 该层尚未实现。当前仓库里的 `Transport/` 指的是 LooiKit 内部 BLE transport seam，不是 UCLAW network transport。命名上要避免混淆：
+
+- `Packages/LooiKit/Sources/LooiKit/Transport` = BLE transport abstraction
+- 未来 `ulooi/Modules/Transport` = UCLAW CBOR-over-WebSocket transport
+
 ### 4.5 App State
 
 `App/State/` —— 整个 app 的 single source of truth（`@Observable` macro）：
@@ -277,6 +324,8 @@ UI 通过 SwiftUI environment 拿到 `AppState`；views 用 `@Bindable` 或 read
 | `Settings/` | 暂停麦克风、解除配对、provider 选择 |
 
 **Theming：** 与 UCLAW 桌面端保持视觉语言一致；使用 system 主题适配 light/dark + iOS 26+ Liquid Glass（如可用）。
+
+**当前 UI 状态：** `ContentView` 仍直接路由到 `DevToolsRootView`。DevTools 是五个 tabs：Scan、Inspect、Send、Sense、Logs。它已经不再暴露任意 raw GATT 写入/订阅能力，而是优先通过 `LooiSession` 与 Motion/Head/Light/Sensor controllers 操作。raw topology / arbitrary notify inspection 被显式 deferred。
 
 ---
 
@@ -340,7 +389,7 @@ CREATE TABLE settings (
 
 ### Wire envelope CDDL
 
-`Schemas/wire-envelope-v1.cddl`（与 uclaw repo 同源；通过 git submodule 或 release artifact 同步）：
+`Schemas/wire-envelope-v1.cddl`（目标态：与 UCLAW repo 同源；通过 git submodule 或 release artifact 同步）：
 
 ```cddl
 envelope = {
@@ -372,6 +421,8 @@ Schemas/wire-envelope-v1.cddl
 ```
 
 Swift 端：build phase script 在每次 build 前跑 codegen。Rust 端：M2 在 uclaw repo 集成时跑。**Schema 是单一真理源，两端类型派生。** 任何 envelope 字段改动 → CDDL 改 → 两边重新生成。
+
+**当前状态：** 本仓库尚未落地 `Schemas/` 与 `Scripts/codegen-envelope.sh`。该段是 M2 contract 设计，不是当前代码事实。
 
 ### 不在 codegen 范围
 
@@ -411,10 +462,6 @@ ulooi/                              # repo root
 ├── docs/
 │   ├── prd.md
 │   └── architecture.md             # 本文档
-├── Schemas/
-│   └── wire-envelope-v1.cddl
-├── Scripts/
-│   └── codegen-envelope.sh
 ├── Packages/
 │   └── LooiKit/                    # Swift Package
 │       ├── Package.swift
@@ -425,19 +472,13 @@ ulooi/                              # repo root
 └── ulooi/                          # iOS app target
     ├── ulooiApp.swift              # @main entry
     ├── App/
-    │   ├── AppState.swift
-    │   └── AppContainer.swift      # 依赖注入
-    ├── Modules/
-    │   ├── Sensory/
-    │   ├── Reflex/
-    │   └── Transport/
-    ├── Views/
-    │   ├── Onboarding/
-    │   ├── Home/
-    │   ├── Conversation/
-    │   ├── Privacy/
-    │   └── Settings/
-    ├── Storage/                    # GRDB schemas + migrations
+    │   └── LooiBootstrap.swift     # 当前 app singleton
+    ├── DevTools/                   # 当前 root UI
+    │   ├── DevToolsRootView.swift
+    │   └── Probe/
+    ├── Shared/
+    │   ├── BuildInfo.swift
+    │   └── DevLog.swift
     ├── Resources/
     │   └── Assets.xcassets/
     ├── Info.plist
@@ -451,9 +492,9 @@ ulooi/                              # repo root
 ### Dev loop
 
 - 主开发：Xcode 16+ workspace
-- 命令行：`xcodebuild -scheme ulooi -destination 'platform=iOS Simulator,name=iPhone 15 Pro'`
+- 命令行：`xcodebuild build -project ulooi.xcodeproj -scheme ulooi -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.5'`
 - LooiKit 单独迭代：`cd Packages/LooiKit && swift test`
-- Schema codegen：Xcode build phase 自动跑；也可手动 `./Scripts/codegen-envelope.sh`
+- Schema codegen：M2 尚未落地；目标态为 Xcode build phase 自动跑，也可手动 `./Scripts/codegen-envelope.sh`
 
 ### CI（M1 之后引入）
 
@@ -473,7 +514,7 @@ ulooi/                              # repo root
 
 | 层 | 策略 | 工具 |
 |---|---|---|
-| LooiKit | unit + protocol-level replay（`.bleskel` 文件） | XCTest + Swift Testing |
+| LooiKit | unit tests via `MockBLETransport`; future protocol-level replay（`.bleskel` 文件） | XCTest + Swift Testing |
 | Transport | envelope codec round-trip + WebSocket mock | XCTest |
 | REFLEX | 状态机 transitions + offline queue replay | XCTest |
 | SENSORY | mock AVAudioSession；ASR 用预录 .wav fixture | XCTest |
@@ -501,7 +542,9 @@ ulooi/                              # repo root
 
 ## 12. 与 UCLAW 后端的契约边界
 
-ulooi 不直接读写 UCLAW 任何 SQLite 表；所有交互都通过 Wire envelope。UCLAW 后端改动汇总见 [M0 spec §6](https://github.com/novolei/uclaw-new/blob/main/docs/superpowers/specs/2026-05-17-ulooi-design.md)。
+ulooi 不直接读写 UCLAW 任何 SQLite 表；目标态所有交互都通过 Wire envelope。UCLAW 后端改动汇总见 M0 spec §6 / M2 implementation plan。
+
+对应 UCLAW workspace/repo family 是 `/Users/ryanliu/Documents/uclaw`；不要把本项目与旧记忆里的其它 UClaw/UCLAW 路径混用。ulooi 和 UCLAW 是独立 git repo，跨端变更必须分别提交和验证。
 
 **契约保证：**
 
@@ -516,7 +559,7 @@ ulooi 不直接读写 UCLAW 任何 SQLite 表；所有交互都通过 Wire envel
 | 主题 | v1 状态 | 演化 |
 |---|---|---|
 | LooiKit | in-tree at `Packages/LooiKit/` | 可独立成 GitHub repo + Swift Package Index 发布 |
-| Schemas | repo-local + uclaw 同源 | 可独立成 schemas-only repo，两端 submodule |
+| Schemas | M2 尚未落地；目标是 repo-local + UCLAW 同源 | 可独立成 schemas-only repo，两端 submodule |
 | iPad 适配 | 未做 | M1 spec 决定是否 v1 内做 |
 | Apple Watch | 未做 | v2+，作为 "controller for Looi" 而非主入口 |
 | 多 Looi 拓扑 | 不支持 | v2+ |

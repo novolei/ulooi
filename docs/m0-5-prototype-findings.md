@@ -94,15 +94,15 @@ App 启动 → BLE state → poweredOn → **auto-reconnect 自动触发**（基
 | 命令 | bytes | 实测 |
 |---|---|---|
 | center | `5A` | ✅ 头回中 |
-| look up | `00` | ✅ 抬头 |
-| look down + auto-return | `FF` | ⚠️ **低头然后自动回中** — 推测 Looi 固件把 FF 当 "nod down gesture" 而不是持续保持位置；或者机械/扭矩限制无法在该极限位置长保持 |
-| 中间值（如 `40`、`80`、`B0`） | 单 byte | ⚠️ 未实测；推测可在 0..0x5A..0xFF 内任意 pitch 位置 |
+| look up step | `3A` from center | ✅ Ryan 2026-05-19 真机反馈：DevTools label-wise up uses smaller pitch byte |
+| look down step | `7A` / `9A` / `BA`... | ✅ Ryan 2026-05-19 真机反馈：DevTools label-wise down uses larger pitch byte；`0A` 步进太小，改 `20` |
+| extrema | `00` / `FF` | ⚠️ 极限值不应用作 DevTools 普通按钮；真实体验可能触发机械回弹或固件保护 |
 
 单次写即可，**不需要 heartbeat**。
 
 **Open questions：**
-- `0x00` 是否也有 auto-return 行为？（仅 `0xFF` 测到了，对称性未验证）
-- 中间值（如 `0x30` `0x80`）是 hold position 还是 gesture？
+- `0x00` / `0xFF` 极限值的固件/机械保护行为仍需系统记录。
+- 其它中间值（如 `0x30` `0x80`）是 hold position 还是 gesture？
 - 是否有"head yaw"通过其它 char 控制（之前假设的 left/right 实际不存在；如果 Looi 真的有头部水平摇摆，可能是别的 char）
 
 ### 2d. Light (FED2)
@@ -110,8 +110,9 @@ App 启动 → BLE state → poweredOn → **auto-reconnect 自动触发**（基
 | 命令 | bytes | 实测 |
 |---|---|---|
 | off | `00` | ✅ 灭 |
-| 其它 1-byte 值 | `01`..`FF` | ✅ **亮度梯度**（不是 on/off binary） |
-| max | `FF` 推测 | ⚠️ 未实测 — 各值具体亮度对应表 M1 期间补 |
+| 其它 1-byte 值 | `01`..`7F` | ✅ **亮度梯度**（不是 on/off binary）；`7F` 是当前可靠最大可见值 |
+| app full | `7F` | ✅ Ryan 2026-05-19 真机反馈推导：旧 Half 实际发 `7F` 且有效，`FE/FF` 不亮 |
+| high unsigned range | `80`..`FF` | ⚠️ 暂视为保留/不可靠值；不要用于普通亮度 UI |
 
 **重要差异：** sooper README 写 "Direct control: `00`=Off, `03`=On"，但实测**是连续 PWM analog 亮度**，不是 binary。M1 LightController API 应暴露 `setBrightness(_:UInt8)` 而不是 `setOn(_:Bool)`。
 
@@ -217,7 +218,7 @@ protocol HeadController {
 protocol LightController {
     func setBrightness(_ value: UInt8)        // 1-byte FED2 analog gradient
     func off()
-    func on()                                  // = setBrightness(0xFF)
+    func on()                                  // = setBrightness(0x7F)
 }
 
 protocol SensorStream {

@@ -1,23 +1,87 @@
-import CoreBluetooth
+import LooiKit
 import SwiftUI
 
+// MARK: - DevToolsScanCoordinator
+
+/// Drives `transport.scan(...)` into an observable discoveries list so ScanView
+/// can display all peripherals (including non-Looi) for manual selection.
+///
+/// LooiSession's own scan auto-connects to the first match; this coordinator
+/// drives the transport stream independently so the user can browse and pick.
+///
+/// Note: DevToolsScanCoordinator and LooiSession share the same CoreBluetooth
+/// transport. Calling start() here while session.startScanAndConnect() is also
+/// running is not recommended — only one scan is active at a time in practice
+/// because DevTools is the UI for manual exploration, not production auto-connect.
+@MainActor
+@Observable
+final class DevToolsScanCoordinator {
+    var discoveries: [DiscoveredPeripheral] = []
+    var isScanning: Bool = false
+    var nameFilter: String = "LOOI"
+
+    @ObservationIgnored private var scanTask: Task<Void, Never>?
+    private let transport: BLETransport
+
+    init(transport: BLETransport) {
+        self.transport = transport
+    }
+
+    func start() {
+        guard !isScanning else { return }
+        isScanning = true
+        let filter = nameFilter
+        scanTask = Task { [weak self] in
+            guard let self else { return }
+            let stream = self.transport.scan(nameFilter: filter)
+            for await p in stream {
+                if Task.isCancelled { break }
+                if let idx = self.discoveries.firstIndex(where: { $0.id == p.id }) {
+                    self.discoveries[idx] = p
+                } else {
+                    self.discoveries.append(p)
+                }
+            }
+        }
+    }
+
+    func stop() async {
+        scanTask?.cancel()
+        scanTask = nil
+        await transport.stopScan()
+        isScanning = false
+    }
+
+    func clearDiscoveries() {
+        discoveries.removeAll()
+    }
+}
+
+// MARK: - ScanView
+
 struct ScanView: View {
-    // Plain `let` — no `$central.xxx` binding usage; @Observable read-tracking
-    // via property access in body is sufficient.
-    let central: BLECentral
+    let transport: BLETransport
+    let session: LooiSession
     let log: ProbeLog
 
-    @State private var serviceFilterText: String = ""
+    @State private var coordinator: DevToolsScanCoordinator
+
+    init(transport: BLETransport, session: LooiSession, log: ProbeLog) {
+        self.transport = transport
+        self.session = session
+        self.log = log
+        _coordinator = State(initialValue: DevToolsScanCoordinator(transport: transport))
+    }
 
     var body: some View {
         NavigationStack {
             List {
-                Section("BLE state") {
+                Section("Session state") {
                     HStack {
-                        Text(central.state.rawValue.capitalized)
-                            .foregroundStyle(central.state == .poweredOn ? .green : .secondary)
+                        Text(session.state.description.capitalized)
+                            .foregroundStyle(session.state.isReady ? .green : .secondary)
                         Spacer()
-                        if central.isScanning {
+                        if coordinator.isScanning {
                             ProgressView()
                         }
                     }
@@ -25,55 +89,45 @@ struct ScanView: View {
 
                 Section("Filter") {
                     Toggle("Only show LOOI devices", isOn: Binding(
-                        get: { !central.nameFilter.isEmpty },
-                        set: { central.nameFilter = $0 ? "LOOI" : "" }
+                        get: { !coordinator.nameFilter.isEmpty },
+                        set: { coordinator.nameFilter = $0 ? "LOOI" : "" }
                     ))
-                    TextField("Service UUID filter (debug, optional)", text: $serviceFilterText)
-                        .textInputAutocapitalization(.characters)
-                        .autocorrectionDisabled()
                     HStack {
-                        Button(central.isScanning ? "Stop Scan" : "Start Scan") {
+                        Button(coordinator.isScanning ? "Stop Scan" : "Start Scan") {
                             DevLog.event(
-                                "ScanView: \(central.isScanning ? "Stop" : "Start") Scan tapped " +
-                                "(state=\(central.state.rawValue), isScanning=\(central.isScanning))",
+                                "ScanView: \(coordinator.isScanning ? "Stop" : "Start") Scan tapped " +
+                                "(sessionState=\(session.state.description), isScanning=\(coordinator.isScanning))",
                                 channel: DevLog.ui
                             )
-                            if central.isScanning {
-                                central.stopScan()
+                            if coordinator.isScanning {
+                                Task { await coordinator.stop() }
                             } else {
-                                central.startScan(serviceFilter: parseFilter())
+                                coordinator.start()
                             }
                         }
                         // Explicit buttonStyle is REQUIRED here. Without it, SwiftUI
                         // treats a multi-Button HStack inside a Form Section row as a
-                        // single tap target — tapping anywhere on the row fires BOTH
-                        // Buttons in source order (Start Scan → Clear results), which
-                        // immediately cancels the scan before any didDiscover callback
-                        // can fire. Smoking gun: console showed
-                        //   Start Scan tapped → scan: start → Clear results tapped →
-                        //   scan: stop (found 0)
-                        // all triggered by a single tap. See [[feedback-swiftui-form-row-buttons]].
+                        // single tap target — tapping anywhere fires ALL Buttons.
+                        // See [[feedback-swiftui-form-row-buttons]].
                         .buttonStyle(.borderedProminent)
-                        .disabled(central.state != .poweredOn)
                         Spacer()
                         Button("Clear results", role: .destructive) {
                             DevLog.event("ScanView: Clear results tapped", channel: DevLog.ui)
-                            central.stopScan()
+                            Task { await coordinator.stop() }
+                            coordinator.clearDiscoveries()
                         }
                         .buttonStyle(.bordered)
                     }
                 }
 
-                Section("Discovered (\(central.discoveries.count))") {
-                    let items = central.discoveries.values.sorted {
-                        $0.rssi > $1.rssi
-                    }
+                Section("Discovered (\(coordinator.discoveries.count))") {
+                    let items = coordinator.discoveries.sorted { $0.rssi > $1.rssi }
                     if items.isEmpty {
                         Text("No peripherals yet. Tap Start Scan.")
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(items) { d in
-                            DiscoveryRow(discovery: d, central: central, log: log)
+                            DiscoveryRow(discovery: d, session: session, log: log)
                         }
                     }
                 }
@@ -81,25 +135,13 @@ struct ScanView: View {
             .navigationTitle("Scan")
         }
     }
-
-    private func parseFilter() -> [CBUUID]? {
-        let trimmed = serviceFilterText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        let parts = trimmed.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-        let uuids = parts.compactMap { p -> CBUUID? in
-            // accept 4-char (16-bit) or full 32-char UUID
-            if p.count == 4 { return CBUUID(string: String(p)) }
-            if p.count >= 32 { return CBUUID(string: String(p)) }
-            log.warn("scan filter: skipped \(p)")
-            return nil
-        }
-        return uuids.isEmpty ? nil : uuids
-    }
 }
 
+// MARK: - DiscoveryRow
+
 private struct DiscoveryRow: View {
-    let discovery: BLECentral.Discovery
-    let central: BLECentral
+    let discovery: DiscoveredPeripheral
+    let session: LooiSession
     let log: ProbeLog
 
     var body: some View {
@@ -116,7 +158,7 @@ private struct DiscoveryRow: View {
                 .font(.caption2.monospaced())
                 .foregroundStyle(.secondary)
             if !discovery.advertisedServices.isEmpty {
-                Text("services: \(discovery.advertisedServices.map { $0.uuidString }.joined(separator: ", "))")
+                Text("services: \(discovery.advertisedServices.joined(separator: ", "))")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
@@ -128,25 +170,22 @@ private struct DiscoveryRow: View {
                     .lineLimit(1)
             }
             HStack {
-                // For LOOI devices, ONLY show the auto-init button — the plain
-                // Connect button is a trap (Looi drops the connection in ~2s
-                // without the INIT handshake + heartbeat). For non-Looi BLE
-                // peripherals, plain Connect is correct (exploratory).
-                if discovery.name.uppercased().contains("LOOI") {
-                    Button("⚡ Connect + Init Looi") {
-                        Task {
-                            await central.connectAndAutoInitLooi(discovery.id)
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                } else {
-                    Button("Connect") {
-                        central.connect(discovery.id)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+                // session.connect(to:) drives the full connect → discover →
+                // handshake → ready pipeline automatically (LooiKit M1 design).
+                // No separate "auto-init" step needed.
+                Button("⚡ Connect via LooiSession") {
+                    DevLog.event(
+                        "ScanView: connect(\(discovery.name) / \(discovery.id.uuidString.prefix(8))) tapped",
+                        channel: DevLog.ui
+                    )
+                    // Use the peripheral overload so currentPeripheral is set
+                    // immediately on tap — ConnectionBanner becomes visible
+                    // straight away, and CommandView enables its buttons
+                    // (both observe currentPeripheral != nil).
+                    session.connect(discovery)
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
                 Spacer()
             }
             .padding(.top, 4)
@@ -162,5 +201,9 @@ private struct DiscoveryRow: View {
 }
 
 #Preview {
-    ScanView(central: BLECentral.shared, log: ProbeLog.shared)
+    ScanView(
+        transport: LooiBootstrap.shared.transport,
+        session: LooiBootstrap.shared.session,
+        log: ProbeLog.shared
+    )
 }
