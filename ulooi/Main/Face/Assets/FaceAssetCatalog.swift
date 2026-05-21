@@ -18,6 +18,12 @@ enum FaceAssetCatalog {
             return cautious
         case .offline:
             return offline
+        case .celebration, .victory, .cute, .drinking:
+            return happy
+        case .cool, .shy, .ashamed:
+            return idle
+        case .fear:
+            return cautious
         }
     }
 }
