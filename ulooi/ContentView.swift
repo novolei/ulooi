@@ -38,7 +38,7 @@ struct ContentView: View {
             .frame(width: proxy.size.width, height: proxy.size.height)
         }
         .sheet(isPresented: $showingSettings) {
-            SettingsRootView(session: session) {
+            SettingsRootView(session: session, mode: mode, director: director) {
                 mode.developerOpen = true
                 showingSettings = false
             }

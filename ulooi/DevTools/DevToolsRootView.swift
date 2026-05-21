@@ -24,6 +24,9 @@ struct DevToolsRootView: View {
             SenseView(session: session, log: log)
                 .tabItem { Label("Sense", systemImage: "hand.tap") }
 
+            P2PDesktopDevView()
+                .tabItem { Label("Desktop", systemImage: "desktopcomputer") }
+
             LogsView(log: log)
                 .tabItem { Label("Logs", systemImage: "doc.text") }
         }

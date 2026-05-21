@@ -9,22 +9,20 @@ struct EmbodiedHomeView: View {
         GeometryReader { proxy in
             let metrics = FaceModeMetrics(size: proxy.size, safeAreaInsets: proxy.safeAreaInsets)
 
-            TimelineView(.periodic(from: .now, by: 0.25)) { _ in
-                let face = director.face
+            let face = director.face
 
-                ZStack {
-                    GeometricFaceView(model: face)
-                        .ignoresSafeArea()
+            ZStack {
+                GeometricFaceView(model: face)
+                    .ignoresSafeArea()
 
-                    VStack(spacing: 0) {
-                        topBar(metrics: metrics)
-                        Spacer(minLength: metrics.middleGap)
-                        bottomControls(face: face, metrics: metrics)
-                    }
-                    .padding(.horizontal, metrics.horizontalPadding)
-                    .padding(.top, metrics.topPadding)
-                    .padding(.bottom, metrics.bottomPadding)
+                VStack(spacing: 0) {
+                    topBar(metrics: metrics)
+                    Spacer(minLength: metrics.middleGap)
+                    bottomControls(face: face, metrics: metrics)
                 }
+                .padding(.horizontal, metrics.horizontalPadding)
+                .padding(.top, metrics.topPadding)
+                .padding(.bottom, metrics.bottomPadding)
             }
         }
         .foregroundStyle(.white)
